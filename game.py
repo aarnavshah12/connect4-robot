@@ -203,7 +203,11 @@ class NoArm:
 
 def main():
     cfg = load_config()
-    calib = Calibration.load()
+    try:
+        calib = Calibration.load()
+    except FileNotFoundError:
+        raise SystemExit("calibration.json missing — run calibrate.py against "
+                         "the rig first (click the 4 board corners)")
 
     from commentary import Commentator
     from overlay import Overlay
