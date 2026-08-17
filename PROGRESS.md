@@ -49,7 +49,7 @@
 2. Engine (win-in-1/block-in-1 across 20 games): **PASSED** (automated, tests/test_engine.py).
 3. Overlay 30+ fps: compose is 1.1 ms (proxy PASSED); live-camera confirmation owner-run.
 4. 5 unattended games: needs the physical rig.
-5. Voice: built; audition ElevenLabs voice (owner), `say -v Zarvox` works now.
+5. Voice: ElevenLabs live-verified (Callum premade; owner's library voice needs a paid tier), cached playback works; `say -v Zarvox` remains the offline fallback.
 
 ## Demo-day checklist (owner)
 1. Copy `config.example.yaml` → `config.yaml`; fill Roboflow API key (+ Anthropic
