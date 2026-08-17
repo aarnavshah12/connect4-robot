@@ -4,7 +4,7 @@ Pure logic — no camera, no model — so all of it unit-tests offline.
 
 Conventions (project-wide):
   - board[row][col], 6 rows x 7 cols, row 0 = BOTTOM (gravity pulls to row 0).
-  - Cells: 0 empty, ROBOT = 1 (red pieces), HUMAN = 2 (blue pieces).
+  - Cells: 0 empty, ROBOT = 1 (red pieces), HUMAN = 2 (yellow pieces).
   - Detections arrive as (x, y, w, h, class_name, confidence) in full-frame
     pixels (vision.py's format); the homography from calibrate.py warps the
     (x, y) centroids into board space where cell centers form a regular grid.
@@ -22,11 +22,28 @@ import numpy as np
 ROWS, COLS = 6, 7
 EMPTY, ROBOT, HUMAN = 0, 1, 2
 
-# model class name -> player. Robot plays RED (owner default).
-COLOR_TO_PLAYER = {"red": ROBOT, "blue": HUMAN}
+# model class name (lowercased by vision.py) -> player. Robot plays RED.
+# The trained model's classes are: Board, No Piece, Red Piece, Yellow Piece
+# (verified live 2026-08-17); Board/No Piece simply aren't in this map.
+COLOR_TO_PLAYER = {
+    "red piece": ROBOT, "red": ROBOT,
+    "yellow piece": HUMAN, "yellow": HUMAN,
+}
 
 DEBOUNCE_N = 5
 CALIBRATION_PATH = Path(__file__).parent / "calibration.json"
+
+# Per-class confidence thresholds from the model's own eval (Roboflow eval
+# Q6Uwm6dpbqcUODiPCJXM on connect4-kewhf/1): per-class F1 optima are 0.12
+# for Red Piece and 0.35 for Yellow Piece; Roboflow's overall recommendation
+# is 0.40. Red recall matters most — VERIFYING must see the piece the arm
+# just placed — and the 5-read debounce + physics check absorb the extra
+# false positives a low threshold lets through.
+MIN_CONFIDENCE = {
+    "red piece": 0.12, "red": 0.12,
+    "yellow piece": 0.35, "yellow": 0.35,
+}
+DEFAULT_MIN_CONFIDENCE = 0.4
 
 
 class Calibration:
@@ -74,16 +91,20 @@ def empty_board():
     return [[EMPTY] * COLS for _ in range(ROWS)]
 
 
-def parse_detections(dets, calib, min_confidence=0.5):
+def parse_detections(dets, calib, min_confidence=None):
     """Detections -> board, or None if the frame is unusable.
 
     Unusable: two detections snap to the same cell, or the result fails the
     physics check (floating piece). Off-grid/low-confidence detections are
     dropped silently (hands, pieces in the feeder, reflections).
+    min_confidence: None -> per-class eval-derived thresholds (MIN_CONFIDENCE);
+    a float applies uniformly (tests).
     """
     board = empty_board()
     for x, y, _w, _h, cls, conf in dets:
-        if conf < min_confidence or cls not in COLOR_TO_PLAYER:
+        thr = (min_confidence if min_confidence is not None
+               else MIN_CONFIDENCE.get(cls, DEFAULT_MIN_CONFIDENCE))
+        if conf < thr or cls not in COLOR_TO_PLAYER:
             continue
         hit = calib.snap(x, y)
         if hit is None:

@@ -16,7 +16,7 @@ def at(row, col):
     return ((col + 0.5) * 100, (5 - row + 0.5) * 100)
 
 
-def det(row, col, cls="red", conf=0.9, jitter=(0, 0)):
+def det(row, col, cls="red piece", conf=0.9, jitter=(0, 0)):
     x, y = at(row, col)
     return (x + jitter[0], y + jitter[1], 70, 70, cls, conf)
 
@@ -38,13 +38,23 @@ def test_cell_center_roundtrip():
 
 
 def test_parse_simple():
-    b = parse_detections([det(0, 3, "red"), det(0, 4, "blue")], CAL)
+    b = parse_detections([det(0, 3, "red piece"), det(0, 4, "yellow piece")], CAL)
     assert b[0][3] == ROBOT and b[0][4] == HUMAN
 
 
 def test_parse_drops_low_conf_and_unknown_class():
-    b = parse_detections([det(0, 3, conf=0.2), det(0, 4, "hand", 0.99)], CAL)
+    # 0.05 is under even red's eval-derived 0.12 threshold
+    b = parse_detections([det(0, 3, conf=0.05), det(0, 4, "hand", 0.99)], CAL)
     assert b == empty_board()
+
+
+def test_per_class_thresholds_from_eval():
+    # red at 0.2 passes (threshold 0.12); yellow at 0.2 is dropped (0.35)
+    b = parse_detections([det(0, 3, "red piece", 0.2), det(0, 4, "yellow piece", 0.2)], CAL)
+    assert b[0][3] == ROBOT and b[0][4] == 0
+    # model's Board / No Piece classes are ignored even at high confidence
+    b2 = parse_detections([det(0, 3, "board", 0.99), det(0, 4, "no piece", 0.99)], CAL)
+    assert b2 == empty_board()
 
 
 def test_parse_rejects_floating_piece():
@@ -52,7 +62,7 @@ def test_parse_rejects_floating_piece():
 
 
 def test_parse_rejects_color_conflict():
-    assert parse_detections([det(0, 3, "red"), det(0, 3, "blue")], CAL) is None
+    assert parse_detections([det(0, 3, "red piece"), det(0, 3, "yellow piece")], CAL) is None
 
 
 def test_debounce_needs_five_identical():

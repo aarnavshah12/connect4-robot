@@ -32,7 +32,7 @@ def test_compose_time_supports_30fps():
         for c in range(7):
             board[r][c] = 1 if (r + c) % 2 else 2
             x, y = calib.cell_center_frame(r, c)
-            dets.append((x, y, 70, 70, "red" if board[r][c] == 1 else "blue", 0.9))
+            dets.append((x, y, 70, 70, "red piece" if board[r][c] == 1 else "yellow piece", 0.9))
     ov.publish(state="THINKING", board=board, dets=dets, eval=250,
                considered=[(3, 120), (4, 90), (2, -40), (5, 10)],
                history=[f"{i}. you c{i % 7} / bot c{(i + 3) % 7}" for i in range(8)],

@@ -18,7 +18,7 @@ def dets_for(bd):
         for c in range(B.COLS):
             if bd[r][c] != B.EMPTY:
                 x, y = CAL.cell_center_frame(r, c)
-                out.append((x, y, 70, 70, "red" if bd[r][c] == ROBOT else "blue", 0.95))
+                out.append((x, y, 70, 70, "red piece" if bd[r][c] == ROBOT else "yellow piece", 0.95))
     return out
 
 

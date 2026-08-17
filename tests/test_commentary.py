@@ -36,18 +36,17 @@ def test_every_canned_line_passes_the_checker():
 
 class FakeResp:
     def __init__(self, text):
-        self.content = [type("B", (), {"type": "text", "text": text})()]
+        self.text = text
 
 
 class FakeClient:
+    """Mimics google-genai: client.models.generate_content(...) -> resp.text"""
+
     def __init__(self, text):
         self._text = text
-        self.messages = self
+        self.models = self
 
-    def with_options(self, **kw):
-        return self
-
-    def create(self, **kw):
+    def generate_content(self, **kw):
         return FakeResp(self._text)
 
 
@@ -81,6 +80,31 @@ def test_no_client_uses_canned_and_never_blocks():
     got = fire_and_wait(com, "human_win")
     assert time.time() - t0 < 1.5
     assert got and got[0] in CANNED["human_win"]
+
+
+def test_stale_line_is_dropped_when_newer_trigger_fires():
+    """A slow trigger's line must not be spoken after a newer trigger's."""
+
+    class SlowThenFastClient:
+        def __init__(self):
+            self.models = self
+            self.calls = 0
+
+        def generate_content(self, **kw):
+            self.calls += 1
+            if self.calls == 1:
+                time.sleep(0.8)  # slow first call (e.g. impatience nag)
+                return FakeResp("still thinking. adorable.")
+            return FakeResp("cute.")
+
+    got = []
+    com = Commentator({}, on_line=got.append, client=SlowThenFastClient(),
+                      rng=random.Random(1))
+    com.fire("robot_win")          # slow one
+    time.sleep(0.1)
+    com.fire("human_win")          # newer, fast one
+    time.sleep(1.5)                # let both finish
+    assert got == ["cute."], f"stale line leaked: {got}"
 
 
 def test_silence_roughly_60_percent():

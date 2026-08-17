@@ -1,9 +1,12 @@
 """Trash talk. The LLM is the robot's mouth — it NEVER picks moves (CLAUDE.md).
 
 Commentator.fire(trigger, **ctx) is fire-and-forget: a daemon thread asks
-the Anthropic API for one line (3 s total timeout), runs it through the
+the Gemini API for one line (3 s total timeout), runs it through the
 banned-phrase check, and falls back to a canned line on any failure —
 violation, timeout, no API key. The game loop never waits on this.
+
+Model: gemini-3.5-flash-lite (config `commentary_model` overrides) — measured
+~1 s per line with no thinking overhead, which fits the 3 s budget with room.
 
 Style spec (plan, binding): mostly 3-8 words, hard cap 12, deadpan,
 periods never exclamation marks, lowercase energy, contractions, concrete
@@ -152,12 +155,23 @@ class Commentator:
         self.on_line = on_line or (lambda text: None)
         self.rng = rng or random.Random()
         self.history = []
-        self.model = config.get("commentary_model", "claude-opus-5")
+        self._lock = threading.Lock()
+        self._seq = 0  # newest fire() wins; stale lines are dropped, not spoken
+        self.model = config.get("commentary_model", "gemini-3.5-flash-lite")
         self.client = client
-        if self.client is None and config.get("anthropic_api_key"):
-            import anthropic
+        if self.client is None and config.get("gemini_api_key"):
+            import logging
 
-            self.client = anthropic.Anthropic(api_key=config["anthropic_api_key"])
+            from google import genai
+            from google.genai import types as gtypes
+
+            logging.getLogger("google_genai.models").setLevel(logging.ERROR)
+            # Google rejects deadlines under 10s, so this is only the hung-socket
+            # bound; the plan's 3s budget is enforced in _run via future.result.
+            self.client = genai.Client(
+                api_key=config["gemini_api_key"],
+                http_options=gtypes.HttpOptions(timeout=15000),  # ms
+            )
 
     def fire(self, trigger, **ctx):
         """Fire-and-forget; never blocks, never raises."""
@@ -165,20 +179,37 @@ class Commentator:
             return
         if trigger not in ALWAYS_SPEAK and self.rng.random() > SPEAK_P:
             return  # silence is a weapon
-        threading.Thread(target=self._run, args=(trigger, ctx), daemon=True).start()
+        with self._lock:
+            self._seq += 1
+            seq = self._seq
+        threading.Thread(target=self._run, args=(trigger, ctx, seq), daemon=True).start()
 
     # ---- worker thread ----
 
-    def _run(self, trigger, ctx):
-        line = self._generate(trigger, ctx)
+    def _run(self, trigger, ctx, seq):
+        line = None
+        if self.client is not None:
+            # 3s total budget (plan rule). A plain daemon thread, not a
+            # ThreadPoolExecutor: abandoned pool workers are joined at
+            # interpreter exit and would freeze quit for up to the 15s
+            # HTTP timeout; daemon threads never block exit.
+            box = []
+            t = threading.Thread(
+                target=lambda: box.append(self._generate(trigger, ctx)), daemon=True)
+            t.start()
+            t.join(timeout=3.0)
+            line = box[0] if box else None
         if line is None:
             line = self.rng.choice(CANNED[trigger])
-        self.history.append(line)
-        self.history = self.history[-6:]
-        try:
-            self.on_line(line)
-        except Exception as e:
-            print(f"[commentary] on_line failed: {e}")
+        with self._lock:
+            if seq != self._seq:
+                return  # a newer trigger fired while we worked: stale, drop it
+            self.history.append(line)
+            self.history = self.history[-6:]
+            try:
+                self.on_line(line)
+            except Exception as e:
+                print(f"[commentary] on_line failed: {e}")
 
     def _generate(self, trigger, ctx):
         if self.client is None:
@@ -189,15 +220,13 @@ class Commentator:
                 self.history
             )
         try:
-            resp = self.client.with_options(timeout=3.0, max_retries=0).messages.create(
+            from google.genai import types as gtypes
+
+            resp = self.client.models.generate_content(
                 model=self.model,
-                max_tokens=50,
-                thinking={"type": "disabled"},  # a 12-word quip needs speed, not depth
-                output_config={"effort": "low"},
-                system=SYSTEM,
-                messages=[{"role": "user", "content": prompt}],
+                contents=prompt,
+                config=gtypes.GenerateContentConfig(system_instruction=SYSTEM),
             )
-            text = next((b.text for b in resp.content if b.type == "text"), "")
-            return check_line(text)  # violation -> None -> canned, never retry
+            return check_line(resp.text or "")  # violation -> None -> canned, never retry
         except Exception:
             return None  # timeout/offline -> canned

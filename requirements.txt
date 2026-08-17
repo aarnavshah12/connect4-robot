@@ -6,6 +6,6 @@ opencv-python
 inference        # Roboflow local inference (RF-DETR on MPS)
 torch
 supervision
-anthropic        # trash talk
+google-genai     # trash talk (Gemini)
 elevenlabs       # optional voice; falls back to macOS `say`
 pytest

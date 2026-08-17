@@ -31,15 +31,18 @@ class Voice:
             CACHE_DIR.mkdir(exist_ok=True)
 
     def speak(self, text):
-        """Fire-and-forget. Replaces any line still waiting in the queue."""
-        try:
-            self._q.put_nowait(text)
-        except queue.Full:
+        """Fire-and-forget. Replaces any line still waiting in the queue.
+        Loops because the player thread can dequeue between our put and get —
+        the new line must always land, never be silently dropped."""
+        while True:
             try:
-                self._q.get_nowait()
                 self._q.put_nowait(text)
-            except queue.Empty:
-                pass
+                return
+            except queue.Full:
+                try:
+                    self._q.get_nowait()
+                except queue.Empty:
+                    pass  # consumer beat us to it; queue is now free
 
     def _loop(self):
         while True:

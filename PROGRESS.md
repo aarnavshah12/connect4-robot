@@ -30,6 +30,20 @@
   across real process boundaries, overlay fps proxy, commentary spec, state
   machine turns incl. error recovery + wins).
 
+## Verified live against real services (2026-08-17 afternoon)
+- **Roboflow**: key auto-read from `.claude/settings.local.json` (never committed;
+  `.claude/` is gitignored). The plan's 3-part model id is the dashboard checkpoint
+  name; the local `inference` package needs **`connect4-kewhf/1`** (rfdetr-small,
+  trained 2026-08-17 10:10am). Model downloads, loads (8s), and infers at
+  **~175 ms/frame** via CoreML — plenty for the debounce loop; overlay unaffected.
+- **Model classes are `Board / No Piece / Red Piece / Yellow Piece`** — human
+  plays YELLOW, not blue. Mapping + overlay colors + tests all updated;
+  Board/No Piece detections are ignored by construction.
+- **Commentary is now Gemini** (owner request): `gemini-3.5-flash-lite`,
+  measured 0.6-0.9 s/line live with the real key (in gitignored config.yaml).
+  Google rejects <10 s client deadlines, so the plan's 3 s budget is enforced
+  client-side (future.result(3.0) -> canned fallback; late lines discarded).
+
 ## Gate status
 1. Vision (50 identical reads, static board): **owner-run** — needs camera + board.
 2. Engine (win-in-1/block-in-1 across 20 games): **PASSED** (automated, tests/test_engine.py).

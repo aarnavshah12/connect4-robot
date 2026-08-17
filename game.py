@@ -34,9 +34,29 @@ GHOST_S = 0.85
 def load_config():
     p = Path(__file__).parent / "config.yaml"
     if not p.exists():
-        raise SystemExit("config.yaml missing — copy config.example.yaml and "
-                         "fill in your Roboflow API key")
-    return yaml.safe_load(p.read_text())
+        raise SystemExit("config.yaml missing — copy config.example.yaml")
+    cfg = yaml.safe_load(p.read_text()) or {}
+    if not cfg.get("roboflow_api_key"):
+        # the owner keeps the Roboflow key in .claude/settings.local.json
+        import json
+        import os
+
+        local = Path(__file__).parent / ".claude" / "settings.local.json"
+        if local.exists():
+            try:
+                key = (json.loads(local.read_text()).get("env") or {}).get(
+                    "ROBOFLOW_API_KEY")
+            except Exception as e:
+                print(f"[config] could not read {local.name}: {e}")
+                key = None
+            if key:
+                cfg["roboflow_api_key"] = key
+        if not cfg.get("roboflow_api_key"):
+            cfg["roboflow_api_key"] = os.environ.get("ROBOFLOW_API_KEY", "")
+    if not cfg.get("roboflow_api_key"):
+        raise SystemExit("no Roboflow API key: set it in config.yaml, "
+                         ".claude/settings.local.json, or $ROBOFLOW_API_KEY")
+    return cfg
 
 
 class Game:
@@ -120,7 +140,7 @@ class Game:
         self.overlay.publish(state="SCANNING")
         move = B.legal_human_move(self.board, stable)
         if move is None:
-            self._error_until_fixed("that isn't one new blue piece — undo it", self.board)
+            self._error_until_fixed("that isn't one new yellow piece — undo it", self.board)
             return "error"
         r, c = move
 

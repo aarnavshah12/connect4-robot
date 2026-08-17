@@ -18,14 +18,14 @@ from threading import Lock
 import cv2
 import numpy as np
 
-from board import COLS, EMPTY, HUMAN, ROBOT, ROWS
+from board import COLOR_TO_PLAYER, COLS, EMPTY, HUMAN, ROBOT, ROWS
 
 FEED_W, FEED_H = 1280, 720
 PANEL_W, TICKER_H = 360, 80
 W, H = FEED_W + PANEL_W, FEED_H + TICKER_H
 
 RED = (60, 60, 230)      # robot pieces (BGR)
-BLUE = (230, 140, 40)    # human pieces
+YELLOW = (0, 205, 235)   # human pieces (BGR)
 GOLD = (60, 200, 255)
 GREEN = (80, 220, 80)
 DIM = (46, 40, 36)
@@ -36,7 +36,7 @@ BANNERS = {
     "THINKING": ("THINKING", GOLD),
     "ROBOT_MOVING": ("ROBOT PLAYING COLUMN {col}", RED),
     "VERIFYING": (None, None),
-    "HUMAN_WIN": ("YOU WIN", BLUE),
+    "HUMAN_WIN": ("YOU WIN", YELLOW),
     "ROBOT_WIN": ("ROBOT WINS", RED),
     "ERROR": ("BOARD LOOKS WRONG, FIX IT", (40, 40, 255)),
 }
@@ -97,7 +97,7 @@ class Overlay:
         cv2.putText(base, "BOT", (bx - 4, TWIN_Y - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.45, RED, 1)
         cv2.putText(base, "YOU", (bx - 4, TWIN_Y + 580),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, BLUE, 1)
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, YELLOW, 1)
         return base
 
     # ---- per-frame composition ----
@@ -143,7 +143,10 @@ class Overlay:
 
     def _draw_dets(self, canvas, dets):
         for x, y, w, h, cls, conf in dets:
-            color = RED if cls == "red" else BLUE
+            player = COLOR_TO_PLAYER.get(cls)
+            if player is None:
+                continue  # the model also emits 'board' / 'no piece' — not pieces
+            color = RED if player == ROBOT else YELLOW
             p1 = (int(x - w / 2), int(y - h / 2))
             p2 = (int(x + w / 2), int(y + h / 2))
             cv2.rectangle(canvas, p1, p2, color, 2)
@@ -184,7 +187,7 @@ class Overlay:
         for r in range(ROWS):
             for c in range(COLS):
                 if board[r][c] != EMPTY:
-                    color = RED if board[r][c] == ROBOT else BLUE
+                    color = RED if board[r][c] == ROBOT else YELLOW
                     cv2.circle(canvas, self._twin_center(r, c), CELL // 2 - 4,
                                color, -1)
         # flourish #3: flash the columns minimax is considering
@@ -230,7 +233,7 @@ class Overlay:
         if extent >= 0:
             cv2.rectangle(canvas, (bx + 1, mid - extent), (bx + 21, mid), RED, -1)
         else:
-            cv2.rectangle(canvas, (bx + 1, mid), (bx + 21, mid - extent), BLUE, -1)
+            cv2.rectangle(canvas, (bx + 1, mid), (bx + 21, mid - extent), YELLOW, -1)
         cv2.line(canvas, (bx - 2, mid), (bx + 24, mid), (150, 140, 130), 1)
 
     def _draw_ticker(self, canvas, s):
@@ -285,10 +288,10 @@ if __name__ == "__main__":
             for c in range(COLS):
                 x, y = calib.cell_center_frame(r, c)
                 cell = demo_board[r][c]
-                col = (40, 35, 30) if cell == EMPTY else RED if cell == ROBOT else BLUE
+                col = (40, 35, 30) if cell == EMPTY else RED if cell == ROBOT else YELLOW
                 cv2.circle(f, (int(x), int(y)), 34, col, -1)
                 if cell != EMPTY:
-                    dets.append((x, y, 70, 70, "red" if cell == ROBOT else "blue", 0.93))
+                    dets.append((x, y, 70, 70, "red piece" if cell == ROBOT else "yellow piece", 0.93))
         return dets, f
 
     ov = Overlay(calib=calib)
