@@ -34,6 +34,7 @@ class Calibration:
 
     def __init__(self, homography, cell_w, cell_h):
         self.H = np.asarray(homography, dtype=np.float64)
+        self.Hinv = np.linalg.inv(self.H)
         self.cell_w = float(cell_w)
         self.cell_h = float(cell_h)
 
@@ -65,7 +66,7 @@ class Calibration:
         """(row, col) -> full-frame pixel of that cell's center (for drawing)."""
         row_top = ROWS - 1 - row
         pt = np.array([(col + 0.5) * self.cell_w, (row_top + 0.5) * self.cell_h, 1.0])
-        v = np.linalg.inv(self.H) @ pt
+        v = self.Hinv @ pt
         return float(v[0] / v[2]), float(v[1] / v[2])
 
 

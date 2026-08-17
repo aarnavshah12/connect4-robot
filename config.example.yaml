@@ -1,0 +1,17 @@
+# Copy to config.yaml and fill in. config.yaml is gitignored (keys live there).
+
+roboflow_api_key: "YOUR_ROBOFLOW_API_KEY"
+# Trained model (CLAUDE.md). /1 assumed — confirm the version on the dashboard.
+model_id: "aarnavs-space/connect4-kewhf-1-rfdetr-small-t1/1"
+
+camera_index: 0
+port: "/dev/cu.usbserial-310"
+
+robot_color: red          # robot plays RED pieces (owner default)
+
+anthropic_api_key: ""     # empty -> canned trash talk only (still works offline)
+voice: say                # say | elevenlabs
+elevenlabs_api_key: ""
+elevenlabs_voice_id: ""
+
+show_fps: true            # dev fps counter; set false for the final recording
