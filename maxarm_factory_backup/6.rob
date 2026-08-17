@@ -1,0 +1,144 @@
+{
+    "Actions": [
+        {
+            "Duration": 800,
+            "Values": {
+                "x": 0,
+                "y": -163,
+                "z": 212,
+                "nozzle": 0,
+                "suck": 0
+            }
+        },
+        {
+            "Duration": 800,
+            "Values": {
+                "x": 2,
+                "y": -246,
+                "z": 180,
+                "nozzle": 0,
+                "suck": 0
+            }
+        },
+        {
+            "Duration": 800,
+            "Values": {
+                "x": 1,
+                "y": -155,
+                "z": 210,
+                "nozzle": 0,
+                "suck": 0
+            }
+        },
+        {
+            "Duration": 800,
+            "Values": {
+                "x": 123,
+                "y": -96,
+                "z": 210,
+                "nozzle": 0,
+                "suck": 0
+            }
+        },
+        {
+            "Duration": 800,
+            "Values": {
+                "x": 21,
+                "y": -155,
+                "z": 210,
+                "nozzle": 0,
+                "suck": 0
+            }
+        },
+        {
+            "Duration": 800,
+            "Values": {
+                "x": -87,
+                "y": -129,
+                "z": 210,
+                "nozzle": 0,
+                "suck": 0
+            }
+        },
+        {
+            "Duration": 800,
+            "Values": {
+                "x": 3,
+                "y": -156,
+                "z": 210,
+                "nozzle": 0,
+                "suck": 0
+            }
+        },
+        {
+            "Duration": 800,
+            "Values": {
+                "x": 0,
+                "y": -163,
+                "z": 212,
+                "nozzle": 0,
+                "suck": 0
+            }
+        },
+        {
+            "Duration": 800,
+            "Values": {
+                "x": 2,
+                "y": -246,
+                "z": 180,
+                "nozzle": 0,
+                "suck": 0
+            }
+        },
+        {
+            "Duration": 800,
+            "Values": {
+                "x": 1,
+                "y": -155,
+                "z": 210,
+                "nozzle": 0,
+                "suck": 0
+            }
+        },
+        {
+            "Duration": 800,
+            "Values": {
+                "x": -87,
+                "y": -129,
+                "z": 210,
+                "nozzle": 0,
+                "suck": 0
+            }
+        },
+        {
+            "Duration": 800,
+            "Values": {
+                "x": 21,
+                "y": -155,
+                "z": 210,
+                "nozzle": 0,
+                "suck": 0
+            }
+        },
+        {
+            "Duration": 800,
+            "Values": {
+                "x": 123,
+                "y": -96,
+                "z": 210,
+                "nozzle": 0,
+                "suck": 0
+            }
+        },
+        {
+            "Duration": 800,
+            "Values": {
+                "x": 3,
+                "y": -156,
+                "z": 210,
+                "nozzle": 0,
+                "suck": 0
+            }
+        }
+    ]
+}
