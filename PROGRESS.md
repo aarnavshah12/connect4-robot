@@ -22,13 +22,14 @@
 - **game.py**: full state machine (occlusion-aware debounce, ERROR recovery,
   VERIFYING with expected-board match, board-cleared → new game). `--no-arm`
   rehearsal mode. Workspace-clear confirmation before first motion (safety rule).
-- **commentary.py + voice.py**: Anthropic API (opus-5, thinking off, effort low,
-  3 s timeout, no retry), banned-phrase checker enforced pre-speech, 12+ canned
-  lines per trigger for offline, ~60% speak rate, `say -v Zarvox` default with
-  ElevenLabs behind the same speak() interface, depth-1 speech queue.
-- **Tests: 38 passing** (driver bytes, engine gate, board logic, vision plumbing
-  across real process boundaries, overlay fps proxy, commentary spec, state
-  machine turns incl. error recovery + wins).
+- **commentary.py + voice.py**: Gemini one-liners (see below), banned-phrase
+  checker enforced pre-speech, 12+ canned lines per trigger for offline, ~60%
+  speak rate, ElevenLabs voice with cache + depth-1 speech queue, `say -v
+  Zarvox` offline fallback. Stale lines dropped (newest trigger wins); exit
+  never blocks on an in-flight API call.
+- **Tests: 40 passing** (driver bytes, engine gate, board logic, vision plumbing
+  across real process boundaries, overlay fps proxy, commentary spec + stale-line
+  ordering, state machine turns incl. error recovery + wins).
 
 ## Verified live against real services (2026-08-17 afternoon)
 - **Roboflow**: key auto-read from `.claude/settings.local.json` (never committed;
@@ -52,10 +53,12 @@
 5. Voice: ElevenLabs live-verified (Callum premade; owner's library voice needs a paid tier), cached playback works; `say -v Zarvox` remains the offline fallback.
 
 ## Demo-day checklist (owner)
-1. Copy `config.example.yaml` → `config.yaml`; fill Roboflow API key (+ Anthropic
-   key for live trash talk; optional ElevenLabs). Confirm model version `/1` on
-   the dashboard.
+1. config.yaml is DONE (Roboflow auto-read from .claude, Gemini + ElevenLabs keys
+   in, model id verified). Only optional tweak: `camera_index` if using an
+   external webcam.
 2. Plug in arm + camera. Close any VS Code Serial Monitor tab (it steals the port).
+   Human plays YELLOW pieces; feeder stocked with RED. Light the board evenly
+   (the model's one weakness is red↔yellow confusion in poor light).
 3. Teach poses: `.venv/bin/python jog.py` (h=home, e=feeder pick, 0-6=columns,
    t=travel height, y=test cycle, q=save).
 4. Calibrate camera: `.venv/bin/python calibrate.py` (click 4 corners, s=save).
@@ -63,11 +66,9 @@
 6. The real thing: `.venv/bin/python game.py`. Board cleared = new game.
 7. Set `show_fps: false` in config.yaml for the final recording.
 
-## Blocked on owner
-- Roboflow API key; model version confirmation (Roboflow MCP unauthenticated here).
-- Pose teaching, camera calibration, ElevenLabs audition — all physical-rig steps.
-- End-to-end model smoke test (needs the API key): first run of game.py will
-  print the MPS + model-load log lines from the vision worker — check them.
+## Blocked on owner (physical-rig steps only)
+- Pose teaching (jog.py) and camera calibration (calibrate.py) on the real rig.
+- Everything key/model/API-related is resolved and live-verified.
 
 ## Notes
 - Python: `.venv/` (3.12, uv-managed). Run everything with `.venv/bin/python`.
