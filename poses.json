@@ -1,0 +1,17 @@
+{
+  "calibrated": false,
+  "_note": "PLACEHOLDER coordinates only — run jog.py on the physical rig to teach real poses. pick_and_drop() refuses to run until calibrated is true (jog.py sets it on save).",
+  "speed_ms": 1200,
+  "travel_z": 160,
+  "home": [0, -140, 160],
+  "feeder_pick": [140, -120, 85],
+  "columns": [
+    [-120, -180, 150],
+    [-80, -180, 150],
+    [-40, -180, 150],
+    [0, -180, 150],
+    [40, -180, 150],
+    [80, -180, 150],
+    [120, -180, 150]
+  ]
+}
