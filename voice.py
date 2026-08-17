@@ -54,7 +54,10 @@ class Voice:
 
     def _play(self, text):
         if self._el_client is not None:
-            path = CACHE_DIR / (hashlib.sha1(text.encode()).hexdigest() + ".mp3")
+            voice_id = self.cfg.get("elevenlabs_voice_id", "")
+            # voice id is part of the key so a voice swap can't replay old audio
+            path = CACHE_DIR / (
+                hashlib.sha1(f"{voice_id}:{text}".encode()).hexdigest() + ".mp3")
             if not path.exists():
                 audio = self._el_client.text_to_speech.convert(
                     voice_id=self.cfg.get("elevenlabs_voice_id"),
