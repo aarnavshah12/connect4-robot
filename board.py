@@ -5,9 +5,9 @@ Pure logic — no camera, no model — so all of it unit-tests offline.
 Conventions (project-wide):
   - board[row][col], 6 rows x 7 cols, row 0 = BOTTOM (gravity pulls to row 0).
   - Cells: 0 empty, ROBOT = 1 (red pieces), HUMAN = 2 (blue pieces).
-  - Detections arrive as (x, y, class_name, confidence) in full-frame pixels;
-    the homography from calibrate.py warps them into board space where cell
-    centers form a regular grid.
+  - Detections arrive as (x, y, w, h, class_name, confidence) in full-frame
+    pixels (vision.py's format); the homography from calibrate.py warps the
+    (x, y) centroids into board space where cell centers form a regular grid.
 
 Plan rules implemented here (§Grid mapping): snap to nearest cell center,
 reject detections farther than half a cell from any center, debounce =
@@ -82,7 +82,7 @@ def parse_detections(dets, calib, min_confidence=0.5):
     dropped silently (hands, pieces in the feeder, reflections).
     """
     board = empty_board()
-    for x, y, cls, conf in dets:
+    for x, y, _w, _h, cls, conf in dets:
         if conf < min_confidence or cls not in COLOR_TO_PLAYER:
             continue
         hit = calib.snap(x, y)

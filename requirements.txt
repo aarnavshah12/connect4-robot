@@ -1,0 +1,11 @@
+# install into .venv (python 3.12):  uv pip install --python .venv/bin/python -r requirements.txt
+pyserial
+pyyaml
+numpy
+opencv-python
+inference        # Roboflow local inference (RF-DETR on MPS)
+torch
+supervision
+anthropic        # trash talk
+elevenlabs       # optional voice; falls back to macOS `say`
+pytest

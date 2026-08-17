@@ -1,0 +1,203 @@
+"""Trash talk. The LLM is the robot's mouth — it NEVER picks moves (CLAUDE.md).
+
+Commentator.fire(trigger, **ctx) is fire-and-forget: a daemon thread asks
+the Anthropic API for one line (3 s total timeout), runs it through the
+banned-phrase check, and falls back to a canned line on any failure —
+violation, timeout, no API key. The game loop never waits on this.
+
+Style spec (plan, binding): mostly 3-8 words, hard cap 12, deadpan,
+periods never exclamation marks, lowercase energy, contractions, concrete
+references only. Silence is a weapon: ~60% of non-terminal triggers speak.
+"""
+
+import random
+import re
+import threading
+
+MAX_WORDS = 12
+
+BANNED = [
+    "bold move", "interesting choice", "let's see", "calculating", "beep boop",
+    "as an ai", "game on", "bring it", "fascinating", "delightful", "shall we",
+]
+BANNED_RE = re.compile(
+    r"—|—|the question is|" + "|".join(re.escape(b) for b in BANNED),
+    re.IGNORECASE,
+)
+
+# always speak on these; the rest roll the ~60% dice
+ALWAYS_SPEAK = {"game_start", "robot_win", "human_win"}
+SPEAK_P = 0.6
+
+SYSTEM = """You are the voice of a robot arm playing connect 4 against a human. \
+You write ONE short spoken line of trash talk. Cocky but friendly, PG.
+
+Rules, all hard:
+- mostly 3 to 8 words. fragments are good. sometimes one word. never more than 12 words.
+- deadpan, not hype. periods, never exclamation marks. no "Oh," "Ah," "Well well well," "Ooh."
+- never use: "bold move", "interesting choice", "let's see", "calculating", "beep boop", \
+"as an AI", "game on", "bring it", "fascinating", "delightful", "shall we", em dashes, \
+or any rhetorical "The question is...".
+- reference concrete things only: the column number, the seconds they took, the piece \
+they just hung. never generic gamer talk.
+- contractions always. lowercase energy. an ellipsis buys a pause ("column four... obviously").
+- if the last line you said was long, make this one short.
+- do not include internal or system XML tags in your response.
+Respond with the line only, nothing else."""
+
+PROMPTS = {
+    "game_start": "The game is starting. Open with a taunt.",
+    "jab": "The human just played column {col}. It barely changed anything. Light jab.",
+    "blunder": "The human just blundered playing column {col} (eval swung {swing} to you). "
+               "Pounce on it, reference the actual mistake.",
+    "respect": "The human just played the best possible move, column {col}. Grudging respect.",
+    "foreshadow": "You just set up a forced win. Ominous foreshadowing. "
+                  "Do NOT reveal which column wins.",
+    "robot_win": "You just won the game. Gloat.",
+    "human_win": "The human just beat you. Salty but gracious.",
+    "impatience": "The human has taken {seconds} seconds and still hasn't moved. Impatience.",
+    "error": "The board doesn't match what you expected. Call it out, deadpan.",
+}
+
+CANNED = {
+    "game_start": [
+        "seven columns. you'll pick the wrong one.", "i've already won. proceed.",
+        "drop a piece. surprise me.", "red goes hard today.", "you first. it won't matter.",
+        "i don't lose to carbon.", "your move. take your time... it won't help.",
+        "the board's empty. your chances too.", "let's find out how you lose.",
+        "i was built for this. you weren't.", "go ahead. i like watching hope.",
+        "warming up my gloat.",
+    ],
+    "jab": [
+        "sure. that's a move.", "noted.", "cute.", "that column? fine.",
+        "i've seen worse. barely.", "okay.", "you're helping me. thanks.",
+        "not wrong. not right either.", "mid.", "that changes nothing.",
+        "i'll allow it.", "bold of you to touch column anything.",
+    ],
+    "blunder": [
+        "oh no. anyway.", "that one's going in my highlight reel.",
+        "thanks. i needed that.", "you'll want that one back.",
+        "free real estate.", "and just like that, it's over.",
+        "did your hand slip.", "i'd undo that. you can't.",
+        "that's the sound of a game ending.", "appreciated. genuinely.",
+        "one of us noticed. it wasn't you.", "gift accepted.",
+    ],
+    "respect": [
+        "huh. correct.", "fine. that was the move.", "annoying. well played.",
+        "you found it. took you long enough.", "okay, that one was real.",
+        "respect. reluctantly.", "so you can see the board.",
+        "that's the one i'd have played.", "don't get used to it.",
+        "a genuine move. mark the date.", "acceptable.", "fair enough.",
+    ],
+    "foreshadow": [
+        "count to two.", "you can't stop what's coming.", "it's already done.",
+        "look closer. take your time.", "i'd start practicing your handshake.",
+        "the board knows. you don't.", "two moves. tick tock.",
+        "you're going to see it soon.", "enjoy these last turns.",
+        "there's a trap here. you're in it.", "this is the part i like.",
+        "nothing you do matters now.",
+    ],
+    "robot_win": [
+        "connect four. connect gg.", "and that's the game. as expected.",
+        "four in a row. count them.", "gg. i'd say close one, but no.",
+        "the machines send their regards.", "that's a wrap. wipe the board.",
+        "inevitable.", "i never doubted me.", "good game. for me.",
+        "again? i've got all day.", "you played yourself. i just played.",
+        "flawless. mostly.",
+    ],
+    "human_win": [
+        "fine. you win. this once.", "enjoy it. it won't repeat.",
+        "a fluke, statistically.", "i demand a rematch.", "well played. ugh.",
+        "you got me. write it down.", "somebody unplug the camera.",
+        "my pump was tired.", "gg. beginner's luck, round two.",
+        "you win. i learn. be afraid.", "noted for next time. everything.",
+        "okay. that hurt.",
+    ],
+    "impatience": [
+        "it's seven columns, not chess.", "take your time. i'm immortal.",
+        "twenty seconds. for that board.", "the suspense isn't helping you.",
+        "i've run a million games waiting.", "any column. i'll win anyway.",
+        "still thinking. adorable.", "my pump has better patience than you.",
+        "blink twice if you're stuck.", "we're aging. well, you are.",
+        "today, ideally.", "pick one. they're all bad.",
+    ],
+    "error": [
+        "that's not where that goes.", "the board disagrees with you.",
+        "i saw that. fix it.", "physics says no.", "put it back.",
+        "we both know that's wrong.", "nice try. reset it.",
+        "my camera doesn't blink.", "the board looks wrong. fix it.",
+        "that piece is lying to me.", "undo whatever that was.", "no.",
+    ],
+}
+
+
+def check_line(line):
+    """Enforce the style spec. Returns the cleaned line or None on violation."""
+    line = line.strip().strip('"')
+    if not line or "\n" in line:
+        return None
+    if len(line.split()) > MAX_WORDS:
+        return None
+    if "!" in line or "<" in line or ">" in line:
+        return None
+    if BANNED_RE.search(line):
+        return None
+    return line
+
+
+class Commentator:
+    def __init__(self, config, on_line=None, client=None, rng=None):
+        """on_line(text) receives every spoken line (overlay ticker + TTS).
+        client is injectable for tests; None + no api key -> canned only."""
+        self.on_line = on_line or (lambda text: None)
+        self.rng = rng or random.Random()
+        self.history = []
+        self.model = config.get("commentary_model", "claude-opus-5")
+        self.client = client
+        if self.client is None and config.get("anthropic_api_key"):
+            import anthropic
+
+            self.client = anthropic.Anthropic(api_key=config["anthropic_api_key"])
+
+    def fire(self, trigger, **ctx):
+        """Fire-and-forget; never blocks, never raises."""
+        if trigger not in PROMPTS:
+            return
+        if trigger not in ALWAYS_SPEAK and self.rng.random() > SPEAK_P:
+            return  # silence is a weapon
+        threading.Thread(target=self._run, args=(trigger, ctx), daemon=True).start()
+
+    # ---- worker thread ----
+
+    def _run(self, trigger, ctx):
+        line = self._generate(trigger, ctx)
+        if line is None:
+            line = self.rng.choice(CANNED[trigger])
+        self.history.append(line)
+        self.history = self.history[-6:]
+        try:
+            self.on_line(line)
+        except Exception as e:
+            print(f"[commentary] on_line failed: {e}")
+
+    def _generate(self, trigger, ctx):
+        if self.client is None:
+            return None
+        prompt = PROMPTS[trigger].format(**ctx)
+        if self.history:
+            prompt += "\nYour recent lines (don't repeat yourself): " + " | ".join(
+                self.history
+            )
+        try:
+            resp = self.client.with_options(timeout=3.0, max_retries=0).messages.create(
+                model=self.model,
+                max_tokens=50,
+                thinking={"type": "disabled"},  # a 12-word quip needs speed, not depth
+                output_config={"effort": "low"},
+                system=SYSTEM,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = next((b.text for b in resp.content if b.type == "text"), "")
+            return check_line(text)  # violation -> None -> canned, never retry
+        except Exception:
+            return None  # timeout/offline -> canned

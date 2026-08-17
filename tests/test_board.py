@@ -18,7 +18,7 @@ def at(row, col):
 
 def det(row, col, cls="red", conf=0.9, jitter=(0, 0)):
     x, y = at(row, col)
-    return (x + jitter[0], y + jitter[1], cls, conf)
+    return (x + jitter[0], y + jitter[1], 70, 70, cls, conf)
 
 
 def test_snap_center_and_jitter():
