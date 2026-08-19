@@ -18,6 +18,7 @@ up -> over target column -> release -> home. Poses come from poses.json,
 taught on the physical arm with jog.py. The robot plays RED pieces.
 """
 
+import glob
 import json
 import struct
 import time
@@ -44,9 +45,24 @@ class UncalibratedError(RuntimeError):
     """poses.json still holds placeholder coordinates — run jog.py first."""
 
 
+def find_port(preferred=DEFAULT_PORT):
+    """The configured port if it exists, else the sole usbserial device.
+    The arm can enumerate under a different number on a different USB socket."""
+    if preferred and Path(preferred).exists():
+        return preferred
+    candidates = sorted(glob.glob("/dev/cu.usbserial-*"))
+    if len(candidates) == 1:
+        return candidates[0]
+    if not candidates:
+        raise SystemExit(
+            f"no MaxArm serial port found (looked for {preferred} and "
+            "/dev/cu.usbserial-*) — is the arm plugged in and powered?")
+    raise SystemExit(f"several usbserial ports: {candidates} — set `port` in config.yaml")
+
+
 class MaxArm:
     def __init__(self, port=DEFAULT_PORT, baud=BAUD, poses_path=POSES_PATH, ser=None):
-        self.ser = ser if ser is not None else serial.Serial(port, baud, timeout=1)
+        self.ser = ser if ser is not None else serial.Serial(find_port(port), baud, timeout=1)
         self._sleep = time.sleep  # injectable for tests
         self.poses_path = Path(poses_path)
         self.poses = json.loads(self.poses_path.read_text())
