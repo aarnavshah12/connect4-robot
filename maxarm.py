@@ -137,10 +137,22 @@ class MaxArm:
 
     # ---- the game-facing cycle ----
 
-    def pick_and_drop(self, col: int):
+    def pick_and_drop(self, col: int, pick_index: int = 0):
         """Feeder -> suction on -> lift -> over column `col` -> release -> home.
 
         Blocking; returns once the arm is back home (safe to rescan the board).
+
+        The descent onto the stack is staged: fast to a point directly above
+        the piece, then a short SLOW final drop. Endpoints of a move are
+        exact, but the firmware interpolates joint angles between them, so a
+        long descent can bow sideways a few mm mid-path — the short final
+        segment keeps the approach effectively dead straight.
+
+        pick_index: how many pieces the arm has already taken from the stack
+        this game. If the stack SINKS as it empties (no spring follower), set
+        "piece_thickness" in poses.json (mm) and teach feeder_pick on top of
+        a FULL stack; the pick height then steps down automatically. With a
+        constant-height feeder leave piece_thickness at 0 (the default).
         """
         if not 0 <= col <= 6:
             raise ValueError(f"column out of range: {col}")
@@ -149,15 +161,20 @@ class MaxArm:
 
         p = self.poses
         travel_z = p["travel_z"]
-        pick = p["feeder_pick"]
+        pick = list(p["feeder_pick"])
+        pick[2] -= pick_index * p.get("piece_thickness", 0)
+        approach = p.get("approach_mm", 25)
         hover = [pick[0], pick[1], travel_z]
+        staging = [pick[0], pick[1], pick[2] + approach]
         drop = p["columns"][col]
 
         self.move_to(hover)                      # over the feeder
-        self.move_to(pick)                       # down onto the piece
+        self.move_to(staging)                    # just above the top piece
+        self.move_to(pick, ms=700)               # short, slow, straight descent
         self.pump_on()
         self._sleep(0.6)                         # let the seal form
-        self.move_to(hover)                      # lift, still holding
+        self.move_to(staging, ms=700)            # lift straight off the stack
+        self.move_to(hover)                      # up to travel height
         self.move_to([drop[0], drop[1], travel_z])   # transit above the column
         self.move_to(drop)                       # down to the drop pose
         self.release()                           # piece falls into the slot

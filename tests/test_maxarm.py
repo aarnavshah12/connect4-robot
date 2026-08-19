@@ -86,18 +86,34 @@ def test_pick_and_drop_sequence(arm):
     vent = w.find(bytes([0xAA, 0x55, SUCTION, 1, 2]))
     close = w.find(bytes([0xAA, 0x55, SUCTION, 1, 3]))
     assert 0 < on < vent < close
-    # motion targets in order: hover, pick, hover, transit, drop, transit, home
+    # motion targets in order: hover, staging, slow pick, staging, hover,
+    # transit, drop, transit, home (default approach_mm = 25)
     moves = []
     i = 0
     while (i := w.find(bytes([0xAA, 0x55, SET_XYZ]), i)) != -1:
         moves.append(struct.unpack("<hhhH", w[i + 4 : i + 12])[:3])
         i += 1
     assert moves == [
-        (140, -120, 160), (140, -120, 85), (140, -120, 160),
+        (140, -120, 160), (140, -120, 110), (140, -120, 85),
+        (140, -120, 110), (140, -120, 160),
         (0, -180, 160), (0, -180, 150), (0, -180, 160), (0, -140, 160),
     ]
     # the pickup happens between pump-on being sent and the lift
     assert on < w.find(bytes([0xAA, 0x55, SET_XYZ]), on)
+
+
+def test_sinking_stack_compensation(arm):
+    arm.poses["piece_thickness"] = 6
+    arm.ser.written = b""
+    arm.pick_and_drop(3, pick_index=4)  # 4 pieces already gone from the stack
+    w = arm.ser.written
+    moves = []
+    i = 0
+    while (i := w.find(bytes([0xAA, 0x55, SET_XYZ]), i)) != -1:
+        moves.append(struct.unpack("<hhhH", w[i + 4 : i + 12])[:3])
+        i += 1
+    assert moves[2] == (140, -120, 85 - 4 * 6)      # pick sank by 24mm
+    assert moves[1] == (140, -120, 85 - 4 * 6 + 25)  # staging rides just above
 
 
 def test_pick_and_drop_refuses_placeholder_poses(arm):

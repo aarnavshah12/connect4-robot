@@ -79,6 +79,7 @@ class Game:
     def reset(self):
         self.board = B.empty_board()
         self.turn = 0
+        self.robot_picks = 0  # pieces taken off the feeder stack this game
         self.history = []
         self.debounce.reset()
 
@@ -175,7 +176,8 @@ class Game:
         self.overlay.publish(state="ROBOT_MOVING", col=col)
         self.overlay.ghost_drop(col, row, duration=GHOST_S)
         self.sleep(GHOST_S)  # announce intent, then move (money shot)
-        self.arm.pick_and_drop(col)
+        self.arm.pick_and_drop(col, self.robot_picks)
+        self.robot_picks += 1  # the stack is one piece shorter now
 
         expected = [rw[:] for rw in self.board]
         expected[row][col] = ROBOT
@@ -216,7 +218,7 @@ class Game:
 class NoArm:
     """--no-arm rehearsal: stands in for MaxArm, moves nothing."""
 
-    def pick_and_drop(self, col):
+    def pick_and_drop(self, col, pick_index=0):
         print(f"[no-arm] would pick_and_drop({col}); waiting as if moving")
         time.sleep(3)
 

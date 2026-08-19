@@ -41,10 +41,12 @@ class ScriptedVision:
 class FakeArm:
     def __init__(self, vision_script=None):
         self.dropped = []
+        self.pick_indices = []
         self.on_drop = None
 
-    def pick_and_drop(self, col):
+    def pick_and_drop(self, col, pick_index=0):
         self.dropped.append(col)
+        self.pick_indices.append(pick_index)
         if self.on_drop:
             self.on_drop(col)
 
