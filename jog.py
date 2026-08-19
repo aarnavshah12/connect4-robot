@@ -62,9 +62,18 @@ def main():
                 dx = {"a": -step, "d": step}.get(k, 0)
                 dy = {"s": -step, "w": step}.get(k, 0)
                 dz = {"f": -step, "r": step}.get(k, 0)
-                pos = [pos[0] + dx, pos[1] + dy, pos[2] + dz]
-                arm.set_xyz(*pos, 250)
-                time.sleep(0.28)
+                target = [pos[0] + dx, pos[1] + dy, pos[2] + dz]
+                arm.set_xyz(*target, 250)
+                time.sleep(0.3)
+                real = arm.read_xyz()
+                if real is None:
+                    print(f"no reply — still at {pos}?")
+                elif max(abs(real[i] - target[i]) for i in range(3)) > 8:
+                    # firmware silently ignores unreachable targets (IK limit)
+                    print(f"arm REFUSED {target} (out of reach) — it's at {list(real)}")
+                    pos = list(real)
+                else:
+                    pos = list(real)
             elif k == "p":
                 real = arm.read_xyz()
                 print(f"target {pos}  arm reports {real}")
