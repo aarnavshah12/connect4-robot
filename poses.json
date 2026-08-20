@@ -1,19 +1,60 @@
 {
   "calibrated": false,
-  "_note": "PLACEHOLDER coordinates only — run jog.py on the physical rig to teach real poses. pick_and_drop() refuses to run until calibrated is true (jog.py sets it on save).",
+  "_note": "feeder_pick, drop_point and piece_thickness are live-validated (2026-08-20 practice runs). columns are still PLACEHOLDERS - teach them before flipping calibrated to true.",
   "speed_ms": 1200,
   "travel_z": 160,
   "approach_mm": 25,
-  "piece_thickness": 0,
-  "home": [0, -140, 160],
-  "feeder_pick": [140, -120, 85],
+  "piece_thickness": 5,
+  "home": [
+    0,
+    -140,
+    160
+  ],
+  "feeder_pick": [
+    113,
+    3,
+    41
+  ],
   "columns": [
-    [-120, -180, 150],
-    [-80, -180, 150],
-    [-40, -180, 150],
-    [0, -180, 150],
-    [40, -180, 150],
-    [80, -180, 150],
-    [120, -180, 150]
+    [
+      -120,
+      -180,
+      150
+    ],
+    [
+      -80,
+      -180,
+      150
+    ],
+    [
+      -40,
+      -180,
+      150
+    ],
+    [
+      0,
+      -180,
+      150
+    ],
+    [
+      40,
+      -180,
+      150
+    ],
+    [
+      80,
+      -180,
+      150
+    ],
+    [
+      120,
+      -180,
+      150
+    ]
+  ],
+  "drop_point": [
+    79,
+    3,
+    105
   ]
 }
