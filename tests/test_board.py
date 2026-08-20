@@ -48,9 +48,10 @@ def test_parse_drops_low_conf_and_unknown_class():
     assert b == empty_board()
 
 
-def test_per_class_thresholds_from_eval():
-    # red at 0.2 passes (threshold 0.12); yellow at 0.2 is dropped (0.35)
-    b = parse_detections([det(0, 3, "red piece", 0.2), det(0, 4, "yellow piece", 0.2)], CAL)
+def test_per_class_thresholds():
+    # red at 0.45 passes (threshold 0.35); yellow at 0.45 is dropped (0.55 —
+    # raised after live phantom-yellow hallucinations)
+    b = parse_detections([det(0, 3, "red piece", 0.45), det(0, 4, "yellow piece", 0.45)], CAL)
     assert b[0][3] == ROBOT and b[0][4] == 0
     # model's Board / No Piece classes are ignored even at high confidence
     b2 = parse_detections([det(0, 3, "board", 0.99), det(0, 4, "no piece", 0.99)], CAL)
