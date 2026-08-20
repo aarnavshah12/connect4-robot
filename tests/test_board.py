@@ -71,7 +71,17 @@ def test_debounce_needs_five_identical():
     for _ in range(4):
         assert d.feed(b) is None
     assert d.feed(b) == b
-    d.feed(None)  # unusable frame resets the streak
+    d.reset()
+    # unusable frames pause the streak, they don't reset it
+    assert d.feed(b) is None
+    assert d.feed(b) is None
+    d.feed(None)
+    assert d.feed(b) is None
+    assert d.feed(b) is None
+    assert d.feed(b) == b  # 5 identical valid reads total
+    # a different board DOES reset
+    other = parse_detections([det(0, 1)], CAL)
+    d.feed(other)
     assert d.feed(b) is None
 
 

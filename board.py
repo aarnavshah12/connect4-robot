@@ -138,9 +138,10 @@ class Debouncer:
         self._count = 0
 
     def feed(self, board):
-        """board (or None for an unusable frame) -> stable board or None."""
+        """board (or None for an unusable frame) -> stable board or None.
+        Unusable frames (occlusion, phantom-detection vetoes) PAUSE the streak
+        rather than resetting it; only a genuinely different board resets."""
         if board is None:
-            self._last, self._count = None, 0
             return None
         if board == self._last:
             self._count += 1
