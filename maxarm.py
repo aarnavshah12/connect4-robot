@@ -153,22 +153,24 @@ class MaxArm:
 
     # ---- the game-facing cycle ----
 
+    def _move_verified(self, xyz, ms=700):
+        """Move and confirm arrival via servo feedback (False = refused/blocked)."""
+        self.set_xyz(*xyz, ms)
+        self._sleep(ms / 1000 + 0.3)
+        real = self.read_xyz()
+        return real is not None and max(
+            abs(real[i] - round(xyz[i])) for i in range(3)) <= 8
+
     def pick_and_drop(self, col: int, pick_index: int = 0):
         """Feeder -> suction on -> lift -> over column `col` -> release -> home.
 
-        Blocking; returns once the arm is back home (safe to rescan the board).
+        Blocking; returns once the arm is back at home (safe to rescan).
+        This is the motion pattern proven on the rig 2026-08-20 (run_test.py):
+        staged slow descents at both ends, drop approached from a few mm above
+        the taught slot (never transiting below slot height), settled release.
 
-        The descent onto the stack is staged: fast to a point directly above
-        the piece, then a short SLOW final drop. Endpoints of a move are
-        exact, but the firmware interpolates joint angles between them, so a
-        long descent can bow sideways a few mm mid-path — the short final
-        segment keeps the approach effectively dead straight.
-
-        pick_index: how many pieces the arm has already taken from the stack
-        this game. If the stack SINKS as it empties (no spring follower), set
-        "piece_thickness" in poses.json (mm) and teach feeder_pick on top of
-        a FULL stack; the pick height then steps down automatically. With a
-        constant-height feeder leave piece_thickness at 0 (the default).
+        pick_index: pieces already taken this game; the pick sinks by
+        poses["piece_thickness"] per piece (feeder_pick = top of a FULL stack).
         """
         if not 0 <= col <= 6:
             raise ValueError(f"column out of range: {col}")
@@ -176,25 +178,29 @@ class MaxArm:
         self.confirm_workspace()
 
         p = self.poses
-        travel_z = p["travel_z"]
+        ztr = p["travel_z"]                       # pickup-side transit height
         pick = list(p["feeder_pick"])
-        pick[2] -= pick_index * p.get("piece_thickness", 0)
-        approach = p.get("approach_mm", 25)
-        hover = [pick[0], pick[1], travel_z]
-        staging = [pick[0], pick[1], pick[2] + approach]
+        pick[2] = round(pick[2] - pick_index * p.get("piece_thickness", 0))
         drop = p["columns"][col]
 
-        self.move_to(hover)                      # over the feeder
-        self.move_to(staging)                    # just above the top piece
-        self.move_to(pick, ms=700)               # short, slow, straight descent
+        self.move_to([pick[0], pick[1], ztr])     # over the feeder
+        self.move_to([pick[0], pick[1], pick[2] + 20])  # just above the piece
+        self.move_to(pick, ms=700)                # short slow straight descent
         self.pump_on()
-        self._sleep(0.6)                         # let the seal form
-        self.move_to(staging, ms=700)            # lift straight off the stack
-        self.move_to(hover)                      # up to travel height
-        self.move_to([drop[0], drop[1], travel_z])   # transit above the column
-        self.move_to(drop)                       # down to the drop pose
-        self.release()                           # piece falls into the slot
-        self._sleep(0.3)
-        self.move_to([drop[0], drop[1], travel_z])   # back up out of frame
-        self.move_to(p["home"])
+        self._sleep(0.6)                          # let the seal form
+        self.move_to([pick[0], pick[1], ztr])     # lift with the piece
+        # approach the slot from above; taught slots can sit ABOVE travel height
+        placed = False
+        for dz in (12, 6, 0):
+            if self._move_verified([drop[0], drop[1], drop[2] + dz]):
+                placed = True
+                break
+        if placed and dz > 0:
+            self.move_to(drop, ms=800)            # slow final onto the slot
+        self._sleep(0.5)                          # settle so nothing swings
+        self.release()
+        self._sleep(0.4)
+        if placed:
+            self.move_to([drop[0], drop[1], drop[2] + max(dz, 6)], ms=700)
+        self.move_to(p["home"])                   # out of the camera's view
         return True

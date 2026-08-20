@@ -1,19 +1,18 @@
 {
-  "calibrated": false,
-  "_note": "feeder_pick/piece_thickness/drop_point live-validated 2026-08-20. columns: teach with nudge.py keys 0-6, then flip calibrated true.",
+  "calibrated": true,
+  "_note": "Live-taught 2026-08-20: feeder_pick=top of full stack, columns=board slots 1-7, drops approached from above. Re-teach any spot via nudge.py.",
   "speed_ms": 1200,
-  "travel_z": 160,
-  "approach_mm": 25,
+  "travel_z": 150,
   "piece_thickness": 6.5,
   "home": [
-    0,
-    -140,
-    160
+    84,
+    10,
+    150
   ],
   "feeder_pick": [
-    79,
-    3,
-    96
+    84,
+    10,
+    103
   ],
   "columns": [
     [
