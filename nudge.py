@@ -9,6 +9,7 @@ left/right swing along the arc it rotates on, up/down is pure height.
   1 / 2 / 3 = step size 2 / 10 / 25 mm
   x = suction on/off (test the grab: seat the cup, x, then w to lift)
   p = print position          e = SAVE this spot as the pickup pose
+  0-6 = SAVE this spot as that board column's drop pose
   q = quit
 
 Refused moves (out of reach) are reported and the tool stays in sync.
@@ -93,6 +94,11 @@ def main():
                 arm.poses["feeder_pick"] = list(real)
                 POSES_PATH.write_text(json.dumps(arm.poses, indent=2) + "\n")
                 print(f"SAVED pickup pose: {list(real)}")
+            elif k in "0123456":
+                real = arm.read_xyz() or tuple(pos)
+                arm.poses["columns"][int(k)] = list(real)
+                POSES_PATH.write_text(json.dumps(arm.poses, indent=2) + "\n")
+                print(f"SAVED column {k} drop pose: {list(real)}")
             elif k == "q":
                 break
     finally:

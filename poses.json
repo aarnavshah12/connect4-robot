@@ -1,19 +1,19 @@
 {
   "calibrated": false,
-  "_note": "feeder_pick, drop_point and piece_thickness are live-validated (2026-08-20 practice runs). columns are still PLACEHOLDERS - teach them before flipping calibrated to true.",
+  "_note": "feeder_pick/piece_thickness/drop_point live-validated 2026-08-20. columns: teach with nudge.py keys 0-6, then flip calibrated true.",
   "speed_ms": 1200,
   "travel_z": 160,
   "approach_mm": 25,
-  "piece_thickness": 5,
+  "piece_thickness": 6.5,
   "home": [
     0,
     -140,
     160
   ],
   "feeder_pick": [
-    113,
+    79,
     3,
-    41
+    96
   ],
   "columns": [
     [
@@ -53,8 +53,8 @@
     ]
   ],
   "drop_point": [
-    79,
-    3,
-    105
+    66,
+    -76,
+    65
   ]
 }
