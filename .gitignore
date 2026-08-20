@@ -7,3 +7,4 @@ config.yaml
 audio_cache/
 calibration.json
 *.mp4
+roast_log.jsonl

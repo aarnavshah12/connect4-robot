@@ -13,11 +13,17 @@ periods never exclamation marks, lowercase energy, contractions, concrete
 references only. Silence is a weapon: ~60% of non-terminal triggers speak.
 """
 
+import json
 import random
 import re
 import threading
+import time
+from pathlib import Path
 
 MAX_WORDS = 28  # owner wants fuller roasts (was 12 under the original spec)
+
+# every spoken line is appended here as one JSON object per line
+LOG_PATH = Path(__file__).parent / "roast_log.jsonl"
 
 BANNED = [
     "bold move", "interesting choice", "let's see", "calculating", "beep boop",
@@ -207,14 +213,25 @@ class Commentator:
             t.start()
             t.join(timeout=self.timeout)
             line = box[0] if box else None
+        source = "live"
         if line is None:
             line = self.rng.choice(CANNED[trigger])
+            source = "canned"
             print(f"[commentary] canned fallback for '{trigger}' (LLM late/failed/filtered)")
         with self._lock:
             if seq != self._seq:
                 return  # a newer trigger fired while we worked: stale, drop it
             self.history.append(line)
             self.history = self.history[-6:]
+            try:
+                with open(LOG_PATH, "a") as f:
+                    f.write(json.dumps({
+                        "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "trigger": trigger, "source": source,
+                        "model": self.model, "line": line,
+                    }) + "\n")
+            except Exception:
+                pass  # logging must never block the mouth
             try:
                 self.on_line(line)
             except Exception as e:
