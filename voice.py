@@ -54,15 +54,19 @@ class Voice:
 
     def _play(self, text):
         if self._el_client is not None:
+            from elevenlabs import VoiceSettings
+
             voice_id = self.cfg.get("elevenlabs_voice_id", "")
-            # voice id is part of the key so a voice swap can't replay old audio
+            speed = self.cfg.get("voice_speed", 0.85)  # smug reads slightly slow (plan)
+            # voice id + speed are in the key: changing either re-renders audio
             path = CACHE_DIR / (
-                hashlib.sha1(f"{voice_id}:{text}".encode()).hexdigest() + ".mp3")
+                hashlib.sha1(f"{voice_id}:{speed}:{text}".encode()).hexdigest() + ".mp3")
             if not path.exists():
                 audio = self._el_client.text_to_speech.convert(
-                    voice_id=self.cfg.get("elevenlabs_voice_id"),
+                    voice_id=voice_id,
                     text=text,
                     model_id="eleven_multilingual_v2",  # expressive > low-latency (plan)
+                    voice_settings=VoiceSettings(speed=speed),
                 )
                 path.write_bytes(b"".join(audio))
             subprocess.run(["afplay", str(path)], check=False)

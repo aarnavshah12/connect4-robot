@@ -157,7 +157,11 @@ class Commentator:
         self.history = []
         self._lock = threading.Lock()
         self._seq = 0  # newest fire() wins; stale lines are dropped, not spoken
-        self.model = config.get("commentary_model", "gemini-3.5-flash-lite")
+        self.model = config.get("commentary_model", "gemini-3.6-flash")
+        # 3.6-flash needs ~3.5s even at low thinking; a line arriving inside
+        # 4.5s still lands during the drama hold + ghost + arm motion window
+        self.timeout = float(config.get("commentary_timeout", 4.5))
+        self._thinking_low_ok = None  # probed on first call per model
         self.client = client
         if self.client is None and config.get("gemini_api_key"):
             import logging
@@ -197,10 +201,11 @@ class Commentator:
             t = threading.Thread(
                 target=lambda: box.append(self._generate(trigger, ctx)), daemon=True)
             t.start()
-            t.join(timeout=3.0)
+            t.join(timeout=self.timeout)
             line = box[0] if box else None
         if line is None:
             line = self.rng.choice(CANNED[trigger])
+            print(f"[commentary] canned fallback for '{trigger}' (LLM late/failed/filtered)")
         with self._lock:
             if seq != self._seq:
                 return  # a newer trigger fired while we worked: stale, drop it
@@ -215,6 +220,17 @@ class Commentator:
         if self.client is None:
             return None
         prompt = PROMPTS[trigger].format(**ctx)
+        # real game context makes real roasts (plan: board + move + eval)
+        if ctx.get("board_ascii"):
+            prompt += ("\n\nThe board right now (Y=human yellow, R=you/red, .=empty, "
+                       "bottom line is the bottom row, columns numbered 0-6):\n"
+                       + ctx["board_ascii"])
+        if ctx.get("moves"):
+            prompt += "\nMoves so far: " + "; ".join(ctx["moves"][-6:])
+        if ctx.get("eval") is not None:
+            e = ctx["eval"]
+            prompt += ("\nYour engine eval: " + (f"+{e}" if e >= 0 else str(e))
+                       + " (positive = you're winning; >500 = crushing)")
         if self.history:
             prompt += "\nYour recent lines (don't repeat yourself): " + " | ".join(
                 self.history
@@ -222,11 +238,23 @@ class Commentator:
         try:
             from google.genai import types as gtypes
 
-            resp = self.client.models.generate_content(
-                model=self.model,
-                contents=prompt,
-                config=gtypes.GenerateContentConfig(system_instruction=SYSTEM),
-            )
+            def call(with_thinking):
+                cfg = dict(system_instruction=SYSTEM)
+                if with_thinking:
+                    cfg["thinking_config"] = gtypes.ThinkingConfig(thinking_level="low")
+                return self.client.models.generate_content(
+                    model=self.model, contents=prompt,
+                    config=gtypes.GenerateContentConfig(**cfg))
+
+            if self._thinking_low_ok is None:
+                try:  # low thinking = fastest mode on thinking models
+                    resp = call(True)
+                    self._thinking_low_ok = True
+                except Exception:
+                    self._thinking_low_ok = False
+                    resp = call(False)
+            else:
+                resp = call(self._thinking_low_ok)
             return check_line(resp.text or "")  # violation -> None -> canned, never retry
         except Exception:
             return None  # timeout/offline -> canned

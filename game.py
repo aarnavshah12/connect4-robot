@@ -110,7 +110,8 @@ class Game:
                 return stable
             if not nagged and self.clock() - t0 > IMPATIENCE_S:
                 nagged = True
-                self.say.fire("impatience", seconds=int(self.clock() - t0))
+                self.say.fire("impatience", seconds=int(self.clock() - t0),
+                              **self._talk_ctx())
             self.sleep(0.03)
 
     def _await_board(self, want, timeout):
@@ -131,6 +132,15 @@ class Game:
         while self._await_board(want, timeout=3600) is None:
             pass
         self.overlay.publish(state="WAIT_HUMAN", expected=None)
+
+    def _talk_ctx(self, eval_score=None):
+        """Real game context for the trash talk (plan: board + moves + eval)."""
+        rows = []
+        for r in reversed(range(B.ROWS)):
+            rows.append(" ".join(".RY"[self.board[r][c]] for c in range(B.COLS)))
+        rows.append("0 1 2 3 4 5 6")
+        return {"board_ascii": "\n".join(rows), "moves": self.history,
+                "eval": eval_score}
 
     # ---- one full human+robot exchange ----
 
@@ -155,7 +165,7 @@ class Game:
         if win:
             self.overlay.publish(state="HUMAN_WIN", board=self.board,
                                  win_cells=win, history=self.history)
-            self.say.fire("human_win")
+            self.say.fire("human_win", **self._talk_ctx())
             return "human_win"
 
         self.overlay.publish(state="THINKING", board=self.board,
@@ -164,12 +174,13 @@ class Game:
         col, score = best_move(self.board, ROBOT, considered=considered)
         swing = score - before
         self.overlay.publish(eval=score, considered=considered)
+        talk = self._talk_ctx(eval_score=score)
         if swing >= 300:
-            self.say.fire("blunder", col=c, swing=swing)
+            self.say.fire("blunder", col=c, swing=swing, **talk)
         elif c == best_human:
-            self.say.fire("respect", col=c)
+            self.say.fire("respect", col=c, **talk)
         else:
-            self.say.fire("jab", col=c)
+            self.say.fire("jab", col=c, **talk)
         self.sleep(DRAMA_S)  # drama hold (plan); engine itself is ~10 ms
 
         row = B.landing_row(self.board, col)
@@ -194,10 +205,10 @@ class Game:
         win = B.check_win(self.board, ROBOT)
         if win:
             self.overlay.publish(state="ROBOT_WIN", win_cells=win)
-            self.say.fire("robot_win")
+            self.say.fire("robot_win", **self._talk_ctx())
             return "robot_win"
         if score >= WIN:
-            self.say.fire("foreshadow")  # forced win found; don't spoil the column
+            self.say.fire("foreshadow", **self._talk_ctx(eval_score=score))  # forced win found; don't spoil the column
         if B.is_full(self.board):
             return "draw"
         return "ok"

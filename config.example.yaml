@@ -13,10 +13,11 @@ port: "/dev/cu.usbserial-310"
 robot_color: red          # robot plays RED pieces (owner default)
 
 gemini_api_key: ""        # empty -> canned trash talk only (still works offline)
-commentary_model: "gemini-3.5-flash-lite"   # ~1s/line, fits the 3s budget
+commentary_model: "gemini-3.6-flash"   # sharper roasts; canned fallback covers slow calls
 
 voice: say                # say | elevenlabs
 elevenlabs_api_key: ""
+voice_speed: 0.85         # 1.0 = normal; smug reads slightly slow
 elevenlabs_voice_id: ""
 
 show_fps: true            # dev fps counter; set false for the final recording
