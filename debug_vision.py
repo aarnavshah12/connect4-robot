@@ -46,15 +46,41 @@ def explain(dets, calib):
 
 
 def main():
+    import cv2
+
     cfg = load_config()
     calib = Calibration.load()
     vision = Vision(cfg)
     vision.start()
     deb = Debouncer()
     last_fid = 0
-    print("watching... drop a piece in. Ctrl+C to stop.")
+    print("watching... drop a piece in. Ctrl+C or press q in the window to stop.")
     try:
         while True:
+            # live preview window: camera + grid + piece boxes
+            _, frame = vision.frame()
+            if frame is not None:
+                _, dets_now, _ = vision.detections()
+                for x, y, w, h, cls, conf in dets_now:
+                    if cls in COLOR_TO_PLAYER:
+                        color = (60, 60, 230) if "red" in cls else (0, 205, 235)
+                        cv2.rectangle(frame, (int(x - w/2), int(y - h/2)),
+                                      (int(x + w/2), int(y + h/2)), color, 2)
+                        hit = calib.snap(x, y)
+                        cv2.putText(frame, f"{cls} {conf:.2f} -> {hit}",
+                                    (int(x - w/2), int(y - h/2) - 6),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+                for r in range(7):
+                    a = calib.cell_center_frame(r - 0.5, -0.5)
+                    b = calib.cell_center_frame(r - 0.5, 6.5)
+                    cv2.line(frame, (int(a[0]), int(a[1])), (int(b[0]), int(b[1])), (90, 200, 90), 1)
+                for c in range(8):
+                    a = calib.cell_center_frame(-0.5, c - 0.5)
+                    b = calib.cell_center_frame(5.5, c - 0.5)
+                    cv2.line(frame, (int(a[0]), int(a[1])), (int(b[0]), int(b[1])), (90, 200, 90), 1)
+                cv2.imshow("debug (q quits)", frame)
+                if (cv2.waitKey(1) & 0xFF) == ord("q"):
+                    break
             fid, dets, ifps = vision.detections()
             if fid == last_fid:
                 time.sleep(0.05)
