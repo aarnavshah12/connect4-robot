@@ -39,9 +39,13 @@ CALIBRATION_PATH = Path(__file__).parent / "calibration.json"
 # is 0.40. Red recall matters most — VERIFYING must see the piece the arm
 # just placed — and the 5-read debounce + physics check absorb the extra
 # false positives a low threshold lets through.
+# NOTE: yellow raised from the eval's 0.35 optimum after live testing
+# (2026-08-20): the real scene hallucinates low-confidence yellow phantoms
+# in empty cells. Red raised from 0.12 for the same reason, margin kept
+# lower because VERIFYING depends on seeing the just-placed red piece.
 MIN_CONFIDENCE = {
-    "red piece": 0.12, "red": 0.12,
-    "yellow piece": 0.35, "yellow": 0.35,
+    "red piece": 0.35, "red": 0.35,
+    "yellow piece": 0.55, "yellow": 0.55,
 }
 DEFAULT_MIN_CONFIDENCE = 0.4
 

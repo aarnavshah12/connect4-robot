@@ -39,7 +39,7 @@ def explain(dets, calib):
         if board[r][c] not in (0, player):
             return None, kept, rejected, "CELL CONFLICT (red+yellow in one cell)"
         board[r][c] = player
-        kept.append(f"{cls}->row{r},col{c}")
+        kept.append(f"{cls}({conf:.2f})->row{r},col{c}")
     if not physics_ok(board):
         return None, kept, rejected, "FLOATING piece (physics veto — row flip?)"
     return board, kept, rejected, None
