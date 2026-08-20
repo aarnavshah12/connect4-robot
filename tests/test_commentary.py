@@ -17,7 +17,8 @@ def test_checker_rejects_banned_phrases():
 def test_checker_rejects_exclamations_emdash_and_length():
     assert check_line("gotcha!") is None
     assert check_line("column four — obviously.") is None
-    assert check_line("one two three four five six seven eight nine ten eleven twelve thirteen") is None
+    assert check_line(" ".join(["word"] * 29)) is None  # over the 28-word cap
+    assert check_line(" ".join(["word"] * 20)) is not None  # fuller roasts allowed
     assert check_line("<thinking>hm</thinking> sure.") is None
 
 
