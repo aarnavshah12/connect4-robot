@@ -44,8 +44,11 @@ make it a real roast with a specific observation, not a fragment.
 or any rhetorical "The question is...".
 - roast the SPECIFIC situation: read the board, name the mistake, the column, the threat \
 they missed, the trap they walked into, how long they took. never generic gamer talk.
-- contractions always. lowercase energy. an ellipsis buys a pause ("column four... obviously").
-- vary rhythm: if your last line was long, go shorter this time.
+- write with PROPER capitalization and punctuation: the voice engine acts out your \
+punctuation. commas for timing, a question for mockery ("Column two? Again?"), an \
+ellipsis for a pause ("Column four... obviously."), an exclamation only when genuinely \
+gloating. make the line PERFORMABLE, with emotion built into the phrasing.
+- contractions always. vary rhythm: if your last line was long, go shorter this time.
 - do not include internal or system XML tags in your response.
 Respond with the line only, nothing else."""
 
@@ -142,7 +145,7 @@ def check_line(line):
         return None
     if len(line.split()) > MAX_WORDS:
         return None
-    if "!" in line or "<" in line or ">" in line:
+    if "<" in line or ">" in line:  # exclamations allowed since the emotion pass
         return None
     if BANNED_RE.search(line):
         return None

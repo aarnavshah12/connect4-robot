@@ -58,15 +58,21 @@ class Voice:
 
             voice_id = self.cfg.get("elevenlabs_voice_id", "")
             speed = self.cfg.get("voice_speed", 0.85)  # smug reads slightly slow (plan)
-            # voice id + speed are in the key: changing either re-renders audio
+            style = self.cfg.get("voice_style", 0.6)   # expressiveness 0-1
+            # voice id + delivery settings are in the key: changes re-render
             path = CACHE_DIR / (
-                hashlib.sha1(f"{voice_id}:{speed}:{text}".encode()).hexdigest() + ".mp3")
+                hashlib.sha1(f"{voice_id}:{speed}:{style}:{text}".encode()).hexdigest()
+                + ".mp3")
             if not path.exists():
                 audio = self._el_client.text_to_speech.convert(
                     voice_id=voice_id,
                     text=text,
                     model_id="eleven_multilingual_v2",  # expressive > low-latency (plan)
-                    voice_settings=VoiceSettings(speed=speed),
+                    voice_settings=VoiceSettings(
+                        speed=speed, style=style,
+                        stability=0.35,        # lower = livelier variation
+                        similarity_boost=0.75,
+                        use_speaker_boost=True),
                 )
                 path.write_bytes(b"".join(audio))
             subprocess.run(["afplay", str(path)], check=False)
