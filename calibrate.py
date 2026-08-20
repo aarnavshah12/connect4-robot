@@ -10,7 +10,8 @@ top-left, top-right, bottom-right, bottom-left (as seen on screen).
 After the 4th click a grid preview is drawn over the feed — check that the
 lines land on the board's cell boundaries.
 
-Keys:  u undo last click   r reset   s save   q quit without saving
+Keys:  u undo last click   r reset   x rotate grid (if 7x6 shows as 6x7)
+       s save   q quit without saving
 
 Also locks exposure/white balance where the backend allows it, so
 detections don't flicker (plan §Vision).
@@ -58,6 +59,7 @@ def main():
     lock_camera(cap)
 
     clicks = []
+    rot = 0  # x key: which clicked corner counts as top-left (fixes rotated grids)
 
     def on_mouse(event, x, y, flags, _):
         if event == cv2.EVENT_LBUTTONDOWN and len(clicks) < 4:
@@ -78,7 +80,8 @@ def main():
             cv2.putText(vis, str(i + 1), (x + 8, y - 8),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         if len(clicks) == 4:
-            src = np.array(clicks, dtype=np.float32)
+            ordered = clicks[rot:] + clicks[:rot]
+            src = np.array(ordered, dtype=np.float32)
             dst = np.array([[0, 0], [COLS * CELL, 0],
                             [COLS * CELL, ROWS * CELL], [0, ROWS * CELL]],
                            dtype=np.float32)
@@ -94,7 +97,7 @@ def main():
                 b = Hinv @ np.array([COLS * CELL, r * CELL, 1])
                 cv2.line(vis, (int(a[0] / a[2]), int(a[1] / a[2])),
                          (int(b[0] / b[2]), int(b[1] / b[2])), (0, 200, 255), 2)
-            cv2.putText(vis, "check grid alignment, then press s to save",
+            cv2.putText(vis, "7 wide x 6 tall? press s to save. wrong way round? press x",
                         (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
         else:
             cv2.putText(vis, f"click corner {len(clicks) + 1}/4 "
@@ -109,6 +112,9 @@ def main():
         elif k == ord("r"):
             clicks.clear()
             H = None
+        elif k == ord("x") and len(clicks) == 4:
+            rot = (rot + 1) % 4
+            print(f"grid rotated (corner order shift {rot})")
         elif k == ord("s") and H is not None:
             xs = [p[0] for p in clicks]
             ys = [p[1] for p in clicks]
