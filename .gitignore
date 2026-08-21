@@ -2,9 +2,18 @@
 .claude/
 __pycache__/
 *.pyc
+.pytest_cache/
 .venv/
+
+# keys & machine-local calibration
 config.yaml
-audio_cache/
 calibration.json
-*.mp4
+
+# generated / media
+audio_cache/
+demo_audio/
 roast_log.jsonl
+Demos/
+*.mov
+*.mp4
+CLAUDE.md
