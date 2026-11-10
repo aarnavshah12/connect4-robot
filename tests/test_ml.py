@@ -19,6 +19,7 @@ from ml.cells import (CLASS_NAMES, IMAGE_SIZE, CellClassifier, CellReader,
 from ml.generate_games import generate
 from ml.player import PolicyValueNet, TorchPlayer
 from ml.positions import encode, position_key
+from ml.prepare_board_cells import _grid
 from ml.prepare_cells import prepare
 from ml.train_player import train as train_player
 from ml.train_vision import train as train_vision
@@ -87,6 +88,27 @@ def test_player_masks_full_columns_and_preserves_board(tmp_path):
         player([[1] * 7 for _ in range(6)], 1)
 
 
+def test_optional_tactical_guard_uses_rules_without_minimax(tmp_path):
+    model = PolicyValueNet()
+    with torch.no_grad():
+        for parameter in model.parameters():
+            parameter.zero_()
+        model.policy.bias[6] = 10  # policy prefers a tactically wrong move
+    checkpoint = tmp_path / "player.pt"
+    torch.save({"format_version": 1, "kind": "player", "state_dict": model.state_dict(),
+                "encoding": "current-opponent-bottom-first"}, checkpoint)
+    pure, guarded = TorchPlayer(checkpoint), TorchPlayer(checkpoint, tactical_guard=True)
+    winning = B.empty_board()
+    for col in range(3):
+        winning[0][col] = B.ROBOT
+    assert pure(winning, B.ROBOT)[0] == 6
+    assert guarded(winning, B.ROBOT)[0] == 3
+    threatened = B.empty_board()
+    for col in range(3):
+        threatened[0][col] = B.HUMAN
+    assert guarded(threatened, B.ROBOT)[0] == 3
+
+
 def test_position_encoding_and_mirror_groups():
     board = B.empty_board()
     board[0][0], board[0][1] = 1, 2
@@ -94,6 +116,24 @@ def test_position_encoding_and_mirror_groups():
     assert planes[0, 0, 1] == 1 and planes[1, 0, 0] == 1
     assert planes.sum() == 2
     assert position_key(board, 2) == position_key([row[::-1] for row in board], 2)
+
+
+def test_board_cell_geometry_recovers_shuffled_perspective_grid():
+    source = np.float32([((col + 0.5) * 100, (row + 0.5) * 100)
+                         for row in range(6) for col in range(7)])
+    corner_src = np.float32([[50, 50], [650, 50], [650, 550], [50, 550]])
+    corner_dst = np.float32([[120, 45], [810, 90], [780, 680], [80, 630]])
+    transform = cv2.getPerspectiveTransform(corner_src, corner_dst)
+    distorted = cv2.perspectiveTransform(source[:, None, :], transform)[:, 0, :]
+    order = np.random.default_rng(42).permutation(42)
+    annotations = [{"bbox": [float(distorted[i, 0] - 20), float(distorted[i, 1] - 20),
+                             40.0, 40.0]} for i in order]
+    recovered = _grid(annotations)
+    assert recovered is not None
+    homography, cells = recovered
+    assert cells == [divmod(int(i), 7) for i in order]
+    mapped = cv2.perspectiveTransform(distorted[:, None, :], homography)[:, 0, :]
+    assert np.max(abs(mapped - source)) < 1
 
 
 def test_game_counts_distinct_results_and_resets_on_unknown():
@@ -125,9 +165,9 @@ def test_torch_config_needs_no_roboflow_key(tmp_path):
     assert load_config(path)["vision_backend"] == "torch"
 
 
-def test_neural_player_full_turn_uses_outcome_scale_and_perspective():
+def test_neural_player_full_turn_uses_learned_scale_and_perspective():
     class LearnedMoves:
-        score_kind = "expected_outcome"
+        score_kind = "learned_value"
 
         def __call__(self, board, player, considered=None):
             if considered is not None:
@@ -143,8 +183,8 @@ def test_neural_player_full_turn_uses_outcome_scale_and_perspective():
     assert game.play_turn() == "ok"
     assert arm.dropped == [4] and "blunder" in say.triggers
     assert "foreshadow" not in say.triggers
-    assert game._talk_ctx()["eval_kind"] == "expected_outcome"
-    assert any(p.get("eval_kind") == "expected_outcome" for p in overlay.published)
+    assert game._talk_ctx()["eval_kind"] == "learned_value"
+    assert any(p.get("eval_kind") == "learned_value" for p in overlay.published)
 
 
 def test_torch_worker_to_board_without_hardware(tmp_path):
@@ -214,7 +254,8 @@ def test_player_training_and_leakage_free_splits(tmp_path):
             boards, players = data[f"{split}_boards"], data[f"{split}_players"]
             keys.append({position_key(b, p) for b, p in zip(boards, players)})
             game_ids.append(set(data[f"{split}_game_ids"]))
-            assert set(data[f"{split}_values"]).issubset({-1, 0, 1})
+            assert np.isfinite(data[f"{split}_values"]).all()
+            assert np.max(abs(data[f"{split}_values"])) <= 1
         for i in range(3):
             for j in range(i + 1, 3):
                 assert not keys[i] & keys[j]

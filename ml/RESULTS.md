@@ -1,11 +1,81 @@
-# First PyTorch experiments — 2026-11-10
+# PyTorch experiments — 2026-11-10
+
+## Improved branch: `pytorch-models-v2`
+
+The selected checkpoints now ship with this branch. The 55-image COCO export
+was read without changing its raw files. `prepare_board_cells.py` found 49
+complete annotated boards: 34 train, 10 validation, and 5 test. It combined
+full calibrated-cell crops with the original training object crops (3,063
+training examples), then evaluated on full cells only (420 validation and
+210 test examples). Six source photos with missing or inconsistent geometry
+were skipped. Five yellow test chips annotated as red and one red training chip
+annotated as yellow were corrected in the derived dataset via the explicit,
+visually reviewed `label_fixes.json`. One oversized validation chip box was
+discarded by the geometry filter. The test label corrections followed inspection
+of the first model's errors, so this is an audited comparison rather than a
+fresh blind test.
+
+The new cell CNN used brightness/contrast and mild blur augmentation, with
+extra loss weight for less frequent chip classes. The checkpoint was selected
+at epoch 3 using clean, dim, and bright validation F1. On the five corrected
+test photos, both the old and new models classified **210/210 clean cells**.
+
+| Controlled test condition | Old CNN | New CNN |
+|---|---:|---:|
+| Clean cells correct | 210/210 | 210/210 |
+| 55% brightness cells correct | 194/210 | **210/210** |
+| 140% brightness cells correct | 183/210 | **210/210** |
+| Complete clean boards accepted at 0.90 confidence | 3/5 | **5/5** |
+| Complete dim boards accepted | 2/5 | 3/5 |
+
+These are controlled brightness changes of the same five photos. They show
+better robustness on this probe, not proven performance on a new camera or
+occluded board. The export has no hand/arm occlusion labels. Keep using the
+existing board legality and robot placement checks during future live tests.
+
+The new player used **1,200 simulated games**, with the starting color chosen
+randomly and **55% exploratory moves** mixed with depth-6 minimax labels. The
+dataset contains **19,631 train**, **1,604 validation**, and **1,506 test**
+positions, with game and mirrored-position separation. Its value target is
+the teacher's search score scaled with `tanh(score / 400)` from the side to
+move. The first dataset's terminal-outcome target was unhelpful because its
+first mover won every generated game. Tactical positions received four times
+the policy loss weight. The selected checkpoint is epoch 11.
+
+On the new held-out positions, move agreement with the teacher is **49.1%**
+and value MSE is **0.188**, compared with **0.293** for a constant-zero value
+prediction on those same positions. Because the training target and dataset
+changed, the old and new value MSE values are not directly comparable.
+
+Matches used identical seed 123, 0–6 random opening moves, and alternated
+which color the network played. The optional guard is a one-move win/block
+rule. It uses no minimax call at runtime, and the pure network results are
+listed separately.
+
+| Player | Versus random (40 games) | Versus depth-6 minimax (20 games) |
+|---|---:|---:|
+| Old pure network | 31 wins, 9 losses | 2 wins, 18 losses |
+| New pure network | **40 wins** | 2 wins, 1 draw, 17 losses |
+| New network + tactical guard | **40 wins** | 2 wins, 2 draws, 16 losses |
+
+The guarded player blocked **20/20** single immediate threats encountered
+against minimax, versus **13/18** for the pure new network. This is an
+improvement in basic tactical reliability. The network remains substantially
+weaker than depth-6 minimax; it needs a stronger training curriculum or search
+before being described as competitive with that engine.
+
+Checkpoint paths: `artifacts/vision/best.pt` and `artifacts/player/best.pt`.
+The two selected weight files are tracked in this branch; raw images, derived
+crops, game datasets, and experiment histories remain local and ignored by Git.
+
+## Earlier baseline: `pytorch-models`
 
 These are learning baselines. Both networks were trained from random weights on
 CPU using the existing Python environment (PyTorch 2.13.0). No camera, serial
 connection, or physical arm was used. Datasets and checkpoint files are local
 artifacts, separate from the source commit.
 
-## Cell classifier
+### Cell classifier
 
 Source: the supplied `Connect4-Forked on 8-17-2026.coco (1)` export. Its files
 were read in place without modification. Derived crops live in `data/cells`.
@@ -40,7 +110,7 @@ There is no measured RF-DETR comparison in this experiment.
 
 Artifacts: `artifacts/vision/best.pt`, `history.json`, `evaluation-test.json`.
 
-## Neural player
+### Neural player
 
 Generated 150 games with depth-6 minimax move labels, 35% random exploration,
 seed 42. After game splits and removing cross-split position/mirror overlap:
@@ -72,7 +142,7 @@ within one game. Against minimax, those figures were 2/2 and 9/15.
 Artifacts: `artifacts/player/best.pt`, `history.json`,
 `evaluation-random.json`, `evaluation-minimax.json`; dataset: `data/games.npz`.
 
-## Next learning experiments
+### Next learning experiments from the baseline
 
 1. Keep the 55 images for the initial lesson. Add new recording sessions with
    balanced red/yellow coverage and the lighting that caused these mistakes.

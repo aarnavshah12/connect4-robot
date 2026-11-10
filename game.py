@@ -175,7 +175,7 @@ class Game:
 
         # eval swing across the human's move decides the jab flavor
         best_human, human_value = self.choose_move(self.board, HUMAN)
-        if self.eval_kind == "expected_outcome":
+        if self.eval_kind == "learned_value":
             # Before the human moves it is their turn: negate their value to
             # compare both positions from the robot's perspective.
             before = -human_value
@@ -198,7 +198,7 @@ class Game:
         swing = score - before
         self.overlay.publish(eval=score, considered=considered)
         talk = self._talk_ctx(eval_score=score)
-        if swing >= (0.3 if self.eval_kind == "expected_outcome" else 300):
+        if swing >= (0.3 if self.eval_kind == "learned_value" else 300):
             self.say.fire("blunder", col=c, swing=swing, **talk)
         elif c == best_human:
             self.say.fire("respect", col=c, **talk)
@@ -266,7 +266,8 @@ def main():
         checkpoint = Path(cfg.get("player_checkpoint", "artifacts/player/best.pt"))
         if not checkpoint.is_absolute():
             checkpoint = Path(__file__).parent / checkpoint
-        move_fn = TorchPlayer(checkpoint, device=cfg.get("player_device", "cpu"))
+        move_fn = TorchPlayer(checkpoint, device=cfg.get("player_device", "cpu"),
+                              tactical_guard=cfg.get("player_tactical_guard", False))
     elif player_backend == "minimax":
         move_fn = best_move
     else:

@@ -59,8 +59,13 @@ class CellDataset(Dataset):
             raise ValueError(f"cannot read image: {path}")
         x = image_tensor(image)
         if self.augment:
-            # Brightness changes preserve red/yellow labels. Hue swaps do not.
-            x = (x * (0.8 + 0.4 * torch.rand(()))).clamp(0, 1)
+            # Same class under dim/bright rooms and mild focus changes.
+            # Changing hue would turn red into yellow, so we keep it stable.
+            contrast = 0.85 + 0.30 * torch.rand(())
+            brightness = 0.45 + 1.10 * torch.rand(())
+            x = ((x - 0.5) * contrast + 0.5).mul(brightness).clamp(0, 1)
+            if torch.rand(()) < 0.25:
+                x = torch.nn.functional.avg_pool2d(x.unsqueeze(0), 3, stride=1, padding=1)[0]
         return x, label
 
 

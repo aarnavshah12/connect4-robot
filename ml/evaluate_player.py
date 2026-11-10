@@ -1,6 +1,7 @@
 """Evaluate held-out prediction agreement, tactics, and actual games.
 
-No tactical overrides are applied: these results measure the neural player.
+The pure network is the default; --tactical-guard measures the optional
+one-move win/block safeguard separately.
 """
 
 import argparse
@@ -85,10 +86,14 @@ def main():
     parser.add_argument("--depth", type=int, default=6)
     parser.add_argument("--seed", type=int, default=123)
     parser.add_argument("--device", default="cpu", choices=["cpu", "mps", "cuda"])
+    parser.add_argument("--tactical-guard", action="store_true",
+                        help="force immediate wins and single-threat blocks")
     parser.add_argument("--output")
     args = parser.parse_args()
-    player = TorchPlayer(args.checkpoint, device=args.device)
-    result = {"held_out": metrics(player.model, DataLoader(PositionDataset(args.data, "test"), batch_size=128),
+    player = TorchPlayer(args.checkpoint, device=args.device,
+                         tactical_guard=args.tactical_guard)
+    result = {"tactical_guard": args.tactical_guard,
+              "held_out": metrics(player.model, DataLoader(PositionDataset(args.data, "test"), batch_size=128),
                                   player.device),
               "matches": evaluate(player, args.games, args.opponent, args.depth, args.seed)}
     rendered = json.dumps(result, indent=2) + "\n"

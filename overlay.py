@@ -229,7 +229,7 @@ class Overlay:
         # advantage bar: eval > 0 favors the robot
         bx = W - 40
         mid = TWIN_Y + 280
-        advantage = (np.clip(s["eval"], -1, 1) if s["eval_kind"] == "expected_outcome"
+        advantage = (np.clip(s["eval"], -1, 1) if s["eval_kind"] == "learned_value"
                      else np.tanh(s["eval"] / 400.0))
         extent = int(278 * advantage)
         if extent >= 0:

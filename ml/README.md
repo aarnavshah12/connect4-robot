@@ -3,6 +3,8 @@
 This branch builds two small neural networks with ordinary Python training
 scripts. You can read every layer and every optimizer step. Start with the
 player: its data comes from simulation, so it needs no hardware or images.
+Selected checkpoints are included in this branch; new training runs use new
+output directories so your experiments do not replace them by accident.
 
 The new branch lives in a separate worktree. The original `main` checkout's
 tracked files have not been edited. Run the commands below from this worktree.
@@ -56,22 +58,27 @@ bottom, matching `board.py`. This encoding lets one network play either color.
 Two convolution layers extract patterns. A shared feature vector feeds two heads:
 
 - **Policy:** seven logits, one per column. Full columns are masked out.
-- **Value:** one number in [-1, 1], estimating the expected outcome for the
-  current player: win +1, draw 0, loss -1.
+- **Value:** one number in [-1, 1], approximating a normalized depth-6
+  minimax search score for the current player.
 
 Generate legal games using a mixture of minimax moves and random exploration:
 
 ```bash
-.venv/bin/python -m ml.generate_games --games 150 --teacher-depth 6 --output data/games.npz
-.venv/bin/python -m ml.train_player --data data/games.npz --epochs 30 --device cpu --output artifacts/player
+.venv/bin/python -m ml.generate_games --games 1200 --teacher-depth 6 --exploration 0.55 --seed 2026 --output data/games-experiment.npz
+.venv/bin/python -m ml.train_player --data data/games-experiment.npz --epochs 25 --device cpu --output artifacts/player-experiment
 ```
 
 The policy label is what minimax preferred at the recorded position. The value
-label is how that generated game actually ended. These are different targets:
-exploration can throw away a winning position, so the value is learning outcomes
-under the data-generation mixture. It is not learning a perfect solver's value.
+label is `tanh(teacher_search_score / 400)` from the player-to-move perspective.
+The first experiment used final game outcomes as value labels. Its first mover
+won all 150 simulated games, so those labels mostly taught the network who
+started. We now randomize the starting color and train value against the
+teacher's search estimate. It is still an estimate, not a perfect solver value.
 
-Loss = **cross-entropy(policy, teacher move) + MSE(value, game outcome)**.
+Loss = **weighted cross-entropy(policy, teacher move) + 0.25 ×
+MSE(value, teacher estimate)**. Positions with an immediate win or a single
+opponent threat get four times the policy loss weight. This teaches the policy
+to pay more attention to mistakes that end games quickly.
 Games are split before training, and any position shared with an earlier split
 is excluded from later splits. Mirrored positions are grouped too. Training
 augmentation mirrors columns and changes a move label `c` to `6-c`.
@@ -79,16 +86,20 @@ augmentation mirrors columns and changes a move label `c` to `6-c`.
 Evaluate and try the player yourself:
 
 ```bash
-.venv/bin/python -m ml.evaluate_player --opponent random --games 40 --output artifacts/player/evaluation-random.json
-.venv/bin/python -m ml.evaluate_player --opponent minimax --depth 6 --games 20 --output artifacts/player/evaluation-minimax.json
+.venv/bin/python -m ml.evaluate_player --checkpoint artifacts/player/best.pt --data data/games-experiment.npz --opponent random --games 40
+.venv/bin/python -m ml.evaluate_player --checkpoint artifacts/player/best.pt --data data/games-experiment.npz --opponent minimax --depth 6 --games 20
 .venv/bin/python -m ml.play
 ```
 
 Evaluation alternates the neural player's side and uses 0–6 random opening
 drops. It reports move agreement, value error, actual wins/draws/losses, and
-whether immediate wins and single threats were handled. It applies no hidden
-tactical overrides. A move different from the teacher's can still be equally
-good; match results and tactical failures provide additional evidence.
+whether immediate wins and single threats were handled. The default measures
+the **pure network**. Pass `--tactical-guard` to measure an optional one-move
+win/block rule separately. The guard uses game rules and the same PyTorch
+network for other moves; it does not call minimax at runtime. A move different
+from the teacher's can still be equally good; match results and tactical
+failures provide additional evidence. For a fair comparison, keep the same
+opponent, opening seed, number of games, and guard setting.
 
 **First exercises:**
 
@@ -98,11 +109,11 @@ good; match results and tactical failures provide additional evidence.
 3. Predict why masking a full column only after softmax can be misleading.
 4. Compare train loss, validation agreement, and value error in `history.json`.
    More epochs can improve train loss while hurting generalization.
-5. Generate 1,000 games with a new output filename, train into a new output
-   directory, and compare against the first checkpoint on the same match seeds.
+5. Generate 2,000 games with a new output filename, train into a new output
+   directory, and compare against the included checkpoint on the same match seeds.
    Keep a fresh final test set for conclusions after tuning.
-6. Add a training curriculum emphasizing immediate wins and blocks. Measure
-   those tactical cases separately before trusting overall win rate.
+6. Generate a separate set of immediate wins and single-threat blocks, then
+   measure how often the pure policy handles them without the guard.
 
 The original depth-8 engine remains available as a baseline and data teacher.
 The PyTorch backend chooses moves with the network at runtime. A later lesson
@@ -126,9 +137,9 @@ Export the existing dataset from Roboflow as **COCO JSON**, unzip it, and point
 the converter at the folder containing `train`, `valid`, and `test`:
 
 ```bash
-.venv/bin/python -m ml.prepare_cells --source /path/to/COCO-export --output data/cells
-.venv/bin/python -m ml.train_vision --data data/cells --epochs 20 --output artifacts/vision
-.venv/bin/python -m ml.evaluate_vision --data data/cells --checkpoint artifacts/vision/best.pt
+.venv/bin/python -m ml.prepare_cells --source /path/to/COCO-export --output data/object-cells
+.venv/bin/python -m ml.train_vision --data data/object-cells --epochs 20 --output artifacts/vision-box-experiment
+.venv/bin/python -m ml.evaluate_vision --data data/object-cells --checkpoint artifacts/vision-box-experiment/best.pt
 ```
 
 The converter maps `No Piece` to empty, crops red/yellow boxes, ignores `Board`,
@@ -144,12 +155,34 @@ splits by recording/session before trusting the test score. The 42 crops of
 one frame are related examples, not 42 independent board configurations.
 
 COCO object boxes bootstrap the classifier. Tight object-box crops can differ
-from full calibrated cell crops at runtime. Add labeled rectified cell crops
-from the actual camera to the appropriate split/class directories when that
-domain difference causes failures. Keep each recording in one split.
+from full calibrated cell crops at runtime. `prepare_board_cells.py` uses the
+42 annotated cell centers to rectify complete source photos, then trains on
+full cell crops as well as the original training boxes. It skips photos whose
+grid annotations are incomplete or inconsistent. The supplied export has six
+such photos. Its raw files remain unchanged.
 
-The saved checkpoint is selected by validation macro F1 so a common empty
-class cannot dominate selection. The evaluation prints a confusion matrix
+For the **supplied export only**, the visually reviewed `label_fixes.json`
+corrects one red chip labeled yellow in training and five yellow chips labeled
+red in the test set. A validation box covering most of the board is rejected
+by the geometry check. New exports should have their labels audited before
+applying any corrections file. Use this preparation path for runtime-aligned
+training:
+
+```bash
+.venv/bin/python -m ml.prepare_board_cells --source /path/to/COCO-export --object-crops data/object-cells --fixes ml/label_fixes.json --output data/full-cells-experiment
+.venv/bin/python -m ml.train_vision --data data/full-cells-experiment --epochs 30 --output artifacts/vision-experiment
+.venv/bin/python -m ml.evaluate_vision --data data/full-cells-experiment --checkpoint artifacts/vision-experiment/best.pt --stress
+```
+
+`--stress` measures clean, dimmed, and brightened cells plus exact 42-cell
+boards. These are synthetic lighting probes on five test photos, not a new
+real-camera validation set. The selection rule uses clean, dim, and bright
+validation F1. Brightness/contrast and mild blur augment only training crops.
+Keep each new recording in one split before producing more crops.
+
+The saved checkpoint is selected by the average of clean, dim, and bright
+validation macro F1, so a common empty class cannot dominate selection. The
+evaluation prints a confusion matrix
 (rows=true, columns=predicted) and per-class precision/recall.
 
 **Vision exercises:**
@@ -190,8 +223,10 @@ backend, and search candidates for minimax.
 
 ## 6. Keep experiments reproducible
 
-Datasets/checkpoints/logs are ignored by Git. Re-running into an existing dataset
-or checkpoint path raises an error; use a new output name for each experiment.
+Datasets and experiment logs are ignored by Git. The selected `best.pt`
+weights in `artifacts/vision` and `artifacts/player` are included with this
+branch. Re-running into an existing dataset or checkpoint path raises an error;
+use a new output name for each experiment.
 `history.json` records each epoch. Seeds make CPU experiments repeatable in this
 environment; different library versions/devices can still change results.
 

@@ -1,4 +1,4 @@
-# Copy to config.yaml in this worktree after training both checkpoints.
+# Copy to config.yaml in this worktree. Selected checkpoints are included.
 vision_backend: torch
 vision_checkpoint: artifacts/vision/best.pt
 vision_device: auto
@@ -7,6 +7,7 @@ vision_min_confidence: 0.90  # tune using held-out real board recordings
 player_backend: torch
 player_checkpoint: artifacts/player/best.pt
 player_device: cpu
+player_tactical_guard: true  # optional immediate-win/block rule; policy still picks other moves
 
 camera_index: 0
 port: "/dev/cu.usbserial-310"

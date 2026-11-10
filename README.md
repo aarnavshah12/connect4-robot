@@ -3,6 +3,7 @@
 This branch adds a **PyTorch learning track** for cell classification and a
 trainable policy/value player. Start with [the hands-on walkthrough](ml/README.md).
 The original RF-DETR/minimax path below remains selectable for comparisons.
+The improved checkpoints are included in this branch; see [measured results](ml/RESULTS.md).
 
 A robot arm that plays Connect 4 against you — and talks trash while doing it.
 

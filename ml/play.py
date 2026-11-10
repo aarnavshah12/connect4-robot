@@ -15,8 +15,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint", default="artifacts/player/best.pt")
     parser.add_argument("--robot-first", action="store_true")
+    parser.add_argument("--tactical-guard", action="store_true")
     args = parser.parse_args()
-    player = TorchPlayer(args.checkpoint)
+    player = TorchPlayer(args.checkpoint, tactical_guard=args.tactical_guard)
     board, turn = B.empty_board(), B.ROBOT if args.robot_first else B.HUMAN
     print("You are yellow (Y). The neural player is red (R). Enter q to quit.")
     try:
@@ -36,7 +37,7 @@ def main():
             else:
                 considered = []
                 col, value = player(board, B.ROBOT, considered)
-                print(f"Neural player: column {col}; learned outcome estimate {value:+.2f}")
+                print(f"Neural player: column {col}; learned search estimate {value:+.2f}")
                 print("Move preferences: " + ", ".join(f"{c}: {p:.0%}" for c, p in considered))
             board[B.landing_row(board, col)][col] = turn
             if B.check_win(board, turn):

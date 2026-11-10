@@ -1,9 +1,9 @@
 """Create player training examples using legal simulated games and minimax.
 
 The policy label is the teacher's preferred move. The value label is the
-actual outcome of that simulated game, from the recorded player's viewpoint.
-Exploration diversifies the positions, so outcomes describe this behavior
-mixture rather than perfect play.
+teacher's search score scaled to [-1, 1], from the player-to-move viewpoint.
+The original version labeled every position by a game outcome. In the first
+150 games, the first mover won all 150, so that label mostly taught turn order.
 """
 
 import argparse
@@ -18,7 +18,7 @@ import engine
 from ml.positions import position_key
 
 
-def generate(output, games=150, teacher_depth=6, exploration=0.35, seed=42):
+def generate(output, games=1000, teacher_depth=6, exploration=0.55, seed=42):
     output = Path(output)
     if output.exists():
         raise ValueError(f"dataset already exists; choose a new output path: {output}")
@@ -29,22 +29,21 @@ def generate(output, games=150, teacher_depth=6, exploration=0.35, seed=42):
     completed = []
     try:
         for game_id in range(games):
-            board, player, positions = B.empty_board(), 1, []
-            winner = 0
+            board, player, positions = B.empty_board(), rng.choice((1, 2)), []
             while True:
-                move, _ = engine.best_move(board, player)
-                positions.append(([row[:] for row in board], player, move))
+                move, search_score = engine.best_move(board, player)
+                positions.append(([row[:] for row in board], player, move,
+                                  float(np.tanh(search_score / 400.0))))
                 allowed = [c for c in range(7) if B.landing_row(board, c) is not None]
                 action = rng.choice(allowed) if rng.random() < exploration else move
                 board[B.landing_row(board, action)][action] = player
                 if B.check_win(board, player):
-                    winner = player
                     break
                 if B.is_full(board):
                     break
                 player = 3 - player
-            records = [(board, player, move, 0 if not winner else 1 if player == winner else -1,
-                        game_id) for board, player, move in positions]
+            records = [(state, side, move, value, game_id)
+                       for state, side, move, value in positions]
             completed.append(records)
             if (game_id + 1) % 25 == 0:
                 print(f"generated {game_id + 1}/{games} games", flush=True)
@@ -70,7 +69,8 @@ def generate(output, games=150, teacher_depth=6, exploration=0.35, seed=42):
                        f"{split}_game_ids": np.asarray(game_ids, dtype=np.int32)})
         counts[split] = len(records)
     metadata = {"games": games, "teacher_depth": teacher_depth, "exploration": exploration,
-                "seed": seed, "counts": counts, "value_target": "mixed-play terminal outcome"}
+                "seed": seed, "counts": counts, "starting_player": "random 1 or 2",
+                "value_target": "tanh(teacher search score / 400)"}
     arrays["metadata"] = np.array(json.dumps(metadata))
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("wb") as stream:
@@ -82,9 +82,9 @@ def generate(output, games=150, teacher_depth=6, exploration=0.35, seed=42):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", default="data/games.npz")
-    parser.add_argument("--games", type=int, default=150)
+    parser.add_argument("--games", type=int, default=1000)
     parser.add_argument("--teacher-depth", type=int, default=6)
-    parser.add_argument("--exploration", type=float, default=0.35)
+    parser.add_argument("--exploration", type=float, default=0.55)
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
     generate(args.output, args.games, args.teacher_depth, args.exploration, args.seed)

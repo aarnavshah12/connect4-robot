@@ -1,5 +1,21 @@
 # Progress
 
+## PyTorch model improvements (2026-11-10, `pytorch-models-v2`)
+- Audited the supplied COCO export without changing raw files; six explicit
+  chip-color corrections live in `ml/label_fixes.json`.
+- Added complete-board crop preparation and 55%/140% brightness checks.
+  On the five audited test photos, the improved vision CNN classified
+  210/210 clean, dim, and bright cells; the first CNN got 210/210, 194/210,
+  and 183/210 respectively. The new checkpoint accepted 5/5 clean boards
+  at 0.90 confidence, versus 3/5 previously.
+- Rebuilt the player dataset from 1,200 simulated games with either color
+  starting, depth-6 search values, and tactical loss weighting. On the
+  1,506-position test set, teacher agreement is 49.1% and value MSE 0.188.
+- Same-seed matches: pure player 40/40 vs random and 2 wins/1 draw in 20
+  games vs depth-6 minimax. Optional one-move tactical guard blocked all
+  20/20 single threats encountered vs minimax and gained one more draw.
+- See `ml/RESULTS.md` for methods and limits. No arm or live camera was used.
+
 ## PyTorch learning branch (2026-11-10)
 - Isolated `pytorch-models` worktree; original main checkout's tracked files unchanged.
 - Added small cell CNN and policy/value network with explicit Python training loops.

@@ -21,14 +21,14 @@ class PolicyValueNet(nn.Module):
 
     def forward(self, positions):
         features = self.features(positions)
-        # Policy logits are move preferences. Value is an expected game outcome.
+        # Policy logits are move preferences. Value approximates the teacher's search score.
         return self.policy(features), self.value(features).tanh().squeeze(-1)
 
 
 class TorchPlayer:
-    score_kind = "expected_outcome"
+    score_kind = "learned_value"
 
-    def __init__(self, checkpoint, device="cpu"):
+    def __init__(self, checkpoint, device="cpu", tactical_guard=False):
         self.device = choose_device(device)
         saved = load_checkpoint(checkpoint, "player")
         if saved.get("encoding") != "current-opponent-bottom-first":
@@ -36,6 +36,22 @@ class TorchPlayer:
         self.model = PolicyValueNet().to(self.device)
         self.model.load_state_dict(saved["state_dict"])
         self.model.eval()
+        self.tactical_guard = tactical_guard
+
+    @staticmethod
+    def _winning_columns(board, player):
+        from board import check_win, landing_row
+
+        winning = []
+        for col in range(7):
+            row = landing_row(board, col)
+            if row is None:
+                continue
+            candidate = [line[:] for line in board]
+            candidate[row][col] = player
+            if check_win(candidate, player):
+                winning.append(col)
+        return winning
 
     def __call__(self, board, player, considered=None):
         allowed = legal_mask(board)
@@ -50,4 +66,13 @@ class TorchPlayer:
             raise ValueError("player produced non-finite predictions")
         if considered is not None:
             considered.extend((int(c), float(probabilities[c])) for c in np.flatnonzero(allowed))
-        return int(probabilities.argmax()), float(value.item())
+        column = int(probabilities.argmax())
+        if self.tactical_guard:
+            wins = self._winning_columns(board, player)
+            if wins:
+                column = max(wins, key=lambda c: probabilities[c])
+            else:
+                threats = self._winning_columns(board, 3 - player)
+                if len(threats) == 1:
+                    column = threats[0]
+        return int(column), float(value.item())
