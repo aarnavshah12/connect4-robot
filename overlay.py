@@ -52,7 +52,7 @@ class Overlay:
         self._lock = Lock()
         self._s = {
             "state": "WAIT_HUMAN", "col": None, "dets": [], "board": None,
-            "eval": 0, "history": [], "ticker": "", "ghost": None,
+            "eval": 0, "eval_kind": "search", "history": [], "ticker": "", "ghost": None,
             "considered": [], "win_cells": None, "expected": None,
             "infer_fps": 0.0, "turn": 0,
         }
@@ -142,7 +142,7 @@ class Overlay:
                      (90, 200, 90), 1, cv2.LINE_AA)
 
     def _draw_dets(self, canvas, dets):
-        for x, y, w, h, cls, conf in dets:
+        for x, y, w, h, cls, conf in dets or []:
             player = COLOR_TO_PLAYER.get(cls)
             if player is None:
                 continue  # the model also emits 'board' / 'no piece' — not pieces
@@ -229,7 +229,9 @@ class Overlay:
         # advantage bar: eval > 0 favors the robot
         bx = W - 40
         mid = TWIN_Y + 280
-        extent = int(278 * np.tanh(s["eval"] / 400.0))
+        advantage = (np.clip(s["eval"], -1, 1) if s["eval_kind"] == "expected_outcome"
+                     else np.tanh(s["eval"] / 400.0))
+        extent = int(278 * advantage)
         if extent >= 0:
             cv2.rectangle(canvas, (bx + 1, mid - extent), (bx + 21, mid), RED, -1)
         else:

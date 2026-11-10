@@ -1,4 +1,7 @@
 # Copy to config.yaml and fill in. config.yaml is gitignored (keys live there).
+# For the PyTorch learning setup, use config.pytorch.example.yaml instead.
+vision_backend: roboflow  # roboflow | torch
+player_backend: minimax   # minimax | torch
 
 # Roboflow key: leave empty — it's auto-read from .claude/settings.local.json
 # (env.ROBOFLOW_API_KEY) or the ROBOFLOW_API_KEY environment variable.

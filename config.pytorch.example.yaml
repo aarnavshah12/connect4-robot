@@ -1,0 +1,17 @@
+# Copy to config.yaml in this worktree after training both checkpoints.
+vision_backend: torch
+vision_checkpoint: artifacts/vision/best.pt
+vision_device: auto
+vision_min_confidence: 0.90  # tune using held-out real board recordings
+
+player_backend: torch
+player_checkpoint: artifacts/player/best.pt
+player_device: cpu
+
+camera_index: 0
+port: "/dev/cu.usbserial-310"
+robot_color: red
+gemini_api_key: ""
+commentary_model: "gemini-3.6-flash"
+voice: say
+show_fps: true

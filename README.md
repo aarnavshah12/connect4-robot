@@ -1,5 +1,9 @@
 # Connect 4 Robot
 
+This branch adds a **PyTorch learning track** for cell classification and a
+trainable policy/value player. Start with [the hands-on walkthrough](ml/README.md).
+The original RF-DETR/minimax path below remains selectable for comparisons.
+
 A robot arm that plays Connect 4 against you — and talks trash while doing it.
 
 A webcam watches the board, an RF-DETR model (trained on

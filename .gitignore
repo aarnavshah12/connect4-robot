@@ -3,7 +3,7 @@
 __pycache__/
 *.pyc
 .pytest_cache/
-.venv/
+.venv
 
 # keys & machine-local calibration
 config.yaml
@@ -17,3 +17,10 @@ Demos/
 *.mov
 *.mp4
 CLAUDE.md
+
+# Local ML datasets, checkpoints, and experiment logs
+data/
+artifacts/
+*.pt
+*.pth
+*.npz

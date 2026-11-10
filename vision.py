@@ -1,4 +1,4 @@
-"""Vision pipeline: camera capture thread + RF-DETR inference in its own
+"""Vision pipeline: camera capture thread + model inference in its own
 PROCESS (plan rule: process, not thread — the GIL must never let model
 compute stutter the draw loop).
 
@@ -12,6 +12,7 @@ Data flow:
 
 dets are (x, y, w, h, class_name, confidence) in FULL-FRAME pixels; board.py
 consumes the (x, y) centroids, overlay.py draws the boxes.
+For the cell classifier, dets=None means an uncertain/occluded scan.
 """
 
 import json
@@ -149,13 +150,66 @@ def inference_worker(shm_name, shape, counter, crop, model_id, api_key, out_q, s
         shm.close()
 
 
+def torch_inference_worker(shm_name, shape, counter, crop, config, calib_path, out_q, stop_evt):
+    """Batch all 42 calibrated cell crops in one PyTorch inference call."""
+    from board import Calibration
+    from ml.cells import CellReader
+    from ml.utils import choose_device
+
+    device = choose_device(config.get("vision_device", "auto"))
+    reader = CellReader(config["vision_checkpoint"], Calibration.load(calib_path), device,
+                        config.get("vision_min_confidence", 0.9))
+    print(f"[vision] PyTorch cell classifier loaded on {device}", flush=True)
+    shm = shared_memory.SharedMemory(name=shm_name)
+    buf = np.ndarray(shape, dtype=np.uint8, buffer=shm.buf)
+    seen, fps, last_t = 0, 0.0, time.monotonic()
+    try:
+        while not stop_evt.is_set():
+            with counter.get_lock():
+                fid = counter.value
+                frame = buf.copy() if fid != seen else None
+            if frame is None:
+                time.sleep(0.003)
+                continue
+            seen = fid
+            try:
+                dets = reader.predict(frame)
+            except Exception as exc:
+                print(f"[vision] unusable frame: {exc}", flush=True)
+                dets = None
+            now = time.monotonic()
+            fps = 0.8 * fps + 0.2 / max(now - last_t, 1e-6)
+            last_t = now
+            try:
+                out_q.put_nowait((fid, dets, round(fps, 1)))
+            except Exception:
+                try:
+                    out_q.get_nowait()
+                    out_q.put_nowait((fid, dets, round(fps, 1)))
+                except Exception:
+                    pass
+    finally:
+        shm.close()
+
+
 class Vision:
     """Facade the rest of the app talks to."""
 
-    def __init__(self, config, calib_path=None, worker=inference_worker, camera=None):
-        self.cfg = config
+    def __init__(self, config, calib_path=None, worker=None, camera=None):
+        self.cfg = dict(config)
         self._worker_fn = worker
         calib_path = calib_path or Path(__file__).parent / "calibration.json"
+        self.calib_path = str(Path(calib_path).resolve())
+        self.backend = self.cfg.get("vision_backend", "roboflow")
+        if self.backend not in ("torch", "roboflow"):
+            raise ValueError(f"unknown vision_backend: {self.backend}")
+        if self.backend == "torch" and worker is None:
+            checkpoint = Path(self.cfg.get("vision_checkpoint", "artifacts/vision/best.pt"))
+            if not checkpoint.is_absolute():
+                checkpoint = Path(__file__).parent / checkpoint
+            if not checkpoint.is_file():
+                raise FileNotFoundError(f"vision checkpoint missing: {checkpoint}; train with ml.train_vision first")
+            self.cfg["vision_checkpoint"] = str(checkpoint)
         calib = json.loads(Path(calib_path).read_text())
         self.crop = calib.get("crop", [0, 0, 1280, 720])
         w, h = calib.get("frame_size", [1280, 720])
@@ -170,15 +224,22 @@ class Vision:
         self._queue = mp.Queue(maxsize=2)
         self._proc = None
         self._pub_thread = None
-        self._latest_dets = (0, [], 0.0)
+        self._latest_dets = (0, None, 0.0)
 
     def start(self):
+        if self._worker_fn is not None:
+            target = self._worker_fn
+            model_args = (self.cfg.get("model_id", ""), self.cfg.get("roboflow_api_key", ""))
+        elif self.backend == "torch":
+            target, model_args = torch_inference_worker, (self.cfg, self.calib_path)
+        else:
+            target = inference_worker
+            model_args = (self.cfg["model_id"], self.cfg.get("roboflow_api_key", ""))
         self.camera.start()
         self._proc = mp.Process(
-            target=self._worker_fn,
+            target=target,
             args=(self._shm.name, self.shape, self._counter, tuple(self.crop),
-                  self.cfg["model_id"], self.cfg.get("roboflow_api_key", ""),
-                  self._queue, self._stop_evt),
+                  *model_args, self._queue, self._stop_evt),
             daemon=True,
         )
         self._proc.start()
@@ -196,8 +257,9 @@ class Vision:
             seen = fid
             if frame.shape != self.shape:  # camera negotiated another size
                 frame = cv2.resize(frame, (self.shape[1], self.shape[0]))
-            self._shm_buf[:] = frame
-            self._counter.value = fid
+            with self._counter.get_lock():
+                self._shm_buf[:] = frame
+                self._counter.value = fid
 
     def frame(self):
         """Newest camera frame for the draw loop: (frame_id, ndarray|None)."""
@@ -205,6 +267,9 @@ class Vision:
 
     def detections(self):
         """Newest (frame_id, dets, infer_fps); never blocks."""
+        if (self.backend == "torch" and self._proc is not None
+                and self._proc.exitcode is not None and not self._stop_evt.is_set()):
+            raise RuntimeError(f"vision worker exited with code {self._proc.exitcode}; see its startup error")
         while True:
             try:
                 self._latest_dets = self._queue.get_nowait()
@@ -215,9 +280,12 @@ class Vision:
     def stop(self):
         self._stop_evt.set()
         self.camera.stop()
+        if self._pub_thread:
+            self._pub_thread.join(timeout=2)
         if self._proc:
             self._proc.join(timeout=3)
             if self._proc.is_alive():
                 self._proc.terminate()
+                self._proc.join(timeout=2)
         self._shm.close()
         self._shm.unlink()

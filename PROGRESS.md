@@ -1,5 +1,20 @@
 # Progress
 
+## PyTorch learning branch (2026-11-10)
+- Isolated `pytorch-models` worktree; original main checkout's tracked files unchanged.
+- Added small cell CNN and policy/value network with explicit Python training loops.
+- Added COCO conversion, simulated-game generation, held-out evaluation, terminal play,
+  backend selection, and a hands-on walkthrough in `ml/README.md`.
+- Trained vision on the supplied 55-image export: 203/210 held-out cell crops correct.
+- Trained player on 150 simulated games: 31/40 wins vs random, 2/20 vs depth-6 minimax.
+  Value estimates remain poor. Full details and limitations: `ml/RESULTS.md`.
+- No physical hardware used. Existing arm, pose teaching, calibration, and voice
+  driver files remain unchanged. Model adapters preserve the existing game stages.
+- Pending: larger/independent vision evaluation, occlusion examples, stronger
+  neural-player training, exact-board accuracy, and a measured RF-DETR comparison.
+- Offline checks: 52 tests passed; all 6 affected game/integration checks also
+  passed after the final reference-backend isolation edit.
+
 ## Done (2026-08-17)
 - **Arm bring-up** (physical arm, morning session): installed HiWonder
   `MaxArm_micropython_microUSB` serial firmware (factory files backed up in

@@ -1,0 +1,6 @@
+# Standalone training/evaluation needs no Roboflow or cloud credentials.
+torch
+numpy
+opencv-python
+pyyaml
+pytest

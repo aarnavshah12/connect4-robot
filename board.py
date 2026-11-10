@@ -104,6 +104,8 @@ def parse_detections(dets, calib, min_confidence=None):
     min_confidence: None -> per-class eval-derived thresholds (MIN_CONFIDENCE);
     a float applies uniformly (tests).
     """
+    if dets is None:  # unknown/occluded is different from confidently empty
+        return None
     board = empty_board()
     for x, y, _w, _h, cls, conf in dets:
         thr = (min_confidence if min_confidence is not None

@@ -31,11 +31,13 @@ DRAMA_S = 1.5
 GHOST_S = 0.85
 
 
-def load_config():
-    p = Path(__file__).parent / "config.yaml"
+def load_config(path=None):
+    p = Path(path) if path else Path(__file__).parent / "config.yaml"
     if not p.exists():
         raise SystemExit("config.yaml missing — copy config.example.yaml")
     cfg = yaml.safe_load(p.read_text()) or {}
+    if cfg.get("vision_backend", "roboflow") == "torch":
+        return cfg
     if not cfg.get("roboflow_api_key"):
         # the owner keeps the Roboflow key in .claude/settings.local.json
         import json
@@ -65,7 +67,7 @@ class Game:
     commentator needs .fire(trigger, **ctx)."""
 
     def __init__(self, vision, arm, overlay, commentator, calib,
-                 clock=time.time, sleep=time.sleep):
+                 clock=time.time, sleep=time.sleep, move_fn=best_move):
         self.vision = vision
         self.arm = arm
         self.overlay = overlay
@@ -73,6 +75,8 @@ class Game:
         self.calib = calib
         self.clock = clock
         self.sleep = sleep
+        self.choose_move = move_fn
+        self.eval_kind = getattr(move_fn, "score_kind", "search")
         self.debounce = Debouncer()
         self.reset()
 
@@ -82,6 +86,7 @@ class Game:
         self.robot_picks = 0  # pieces taken off the feeder stack this game
         self.history = []
         self.debounce.reset()
+        self._last_detection_id = 0
 
     # ---- vision helpers ----
 
@@ -93,11 +98,23 @@ class Game:
         """One debouncer step. Returns a stable parsed board or None.
         Frames where the detection count drops below what's already on the
         board are occlusion (a hand) and reset the streak (plan rule)."""
-        _, dets, _ = self.vision.detections()
-        parsed = B.parse_detections(dets, self.calib)
+        fid, dets, _ = self.vision.detections()
+        if self.vision_backend == "torch" and fid <= self._last_detection_id:
+            return None
+        self._last_detection_id = fid
+        parsed = B.parse_detections(dets, self.calib,
+                                    min_confidence=0.0 if self.vision_backend == "torch" else None)
         if parsed is not None and self._pieces(parsed) < self._pieces(self.board):
             parsed = None
+        if parsed is None:
+            if self.vision_backend == "torch":
+                self.debounce.reset()
+            return None
         return self.debounce.feed(parsed)
+
+    @property
+    def vision_backend(self):
+        return getattr(self.vision, "backend", "roboflow")
 
     def _await_change(self):
         """WAIT_HUMAN: block until the stable board differs from ours."""
@@ -140,12 +157,13 @@ class Game:
             rows.append(" ".join(".RY"[self.board[r][c]] for c in range(B.COLS)))
         rows.append("0 1 2 3 4 5 6")
         return {"board_ascii": "\n".join(rows), "moves": self.history,
-                "eval": eval_score}
+                "eval": eval_score, "eval_kind": self.eval_kind}
 
     # ---- one full human+robot exchange ----
 
     def play_turn(self):
-        self.overlay.publish(state="WAIT_HUMAN", board=self.board, turn=self.turn)
+        self.overlay.publish(state="WAIT_HUMAN", board=self.board, turn=self.turn,
+                             eval_kind=self.eval_kind)
         stable = self._await_change()
 
         self.overlay.publish(state="SCANNING")
@@ -156,8 +174,13 @@ class Game:
         r, c = move
 
         # eval swing across the human's move decides the jab flavor
-        _, before = best_move(self.board, ROBOT)
-        best_human, _ = best_move(self.board, HUMAN)
+        best_human, human_value = self.choose_move(self.board, HUMAN)
+        if self.eval_kind == "expected_outcome":
+            # Before the human moves it is their turn: negate their value to
+            # compare both positions from the robot's perspective.
+            before = -human_value
+        else:
+            _, before = self.choose_move(self.board, ROBOT)
         self.board = stable
         self.turn += 1
         self.history.append(f"{self.turn}. you  col {c}")
@@ -171,11 +194,11 @@ class Game:
         self.overlay.publish(state="THINKING", board=self.board,
                              history=self.history)
         considered = []
-        col, score = best_move(self.board, ROBOT, considered=considered)
+        col, score = self.choose_move(self.board, ROBOT, considered=considered)
         swing = score - before
         self.overlay.publish(eval=score, considered=considered)
         talk = self._talk_ctx(eval_score=score)
-        if swing >= 300:
+        if swing >= (0.3 if self.eval_kind == "expected_outcome" else 300):
             self.say.fire("blunder", col=c, swing=swing, **talk)
         elif c == best_human:
             self.say.fire("respect", col=c, **talk)
@@ -207,7 +230,7 @@ class Game:
             self.overlay.publish(state="ROBOT_WIN", win_cells=win)
             self.say.fire("robot_win", **self._talk_ctx())
             return "robot_win"
-        if score >= WIN:
+        if self.eval_kind == "search" and score >= WIN:
             self.say.fire("foreshadow", **self._talk_ctx(eval_score=score))  # forced win found; don't spoil the column
         if B.is_full(self.board):
             return "draw"
@@ -236,6 +259,18 @@ class NoArm:
 
 def main():
     cfg = load_config()
+    player_backend = cfg.get("player_backend", "minimax")
+    if player_backend == "torch":
+        from ml.player import TorchPlayer
+
+        checkpoint = Path(cfg.get("player_checkpoint", "artifacts/player/best.pt"))
+        if not checkpoint.is_absolute():
+            checkpoint = Path(__file__).parent / checkpoint
+        move_fn = TorchPlayer(checkpoint, device=cfg.get("player_device", "cpu"))
+    elif player_backend == "minimax":
+        move_fn = best_move
+    else:
+        raise SystemExit(f"unknown player_backend: {player_backend}")
     try:
         calib = Calibration.load()
     except FileNotFoundError:
@@ -270,12 +305,12 @@ def main():
         voice.speak(text)
 
     commentator = Commentator(cfg, on_line=on_line)
-    game = Game(vision, arm, overlay, commentator, calib)
+    game = Game(vision, arm, overlay, commentator, calib, move_fn=move_fn)
 
     def pump():  # keep newest detections flowing onto the overlay
         while True:
             _, dets, ifps = vision.detections()
-            overlay.publish(dets=dets, infer_fps=ifps)
+            overlay.publish(dets=dets or [], infer_fps=ifps)
             time.sleep(0.03)
 
     threading.Thread(target=game.run, daemon=True).start()

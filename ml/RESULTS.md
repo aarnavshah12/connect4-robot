@@ -1,0 +1,89 @@
+# First PyTorch experiments — 2026-11-10
+
+These are learning baselines. Both networks were trained from random weights on
+CPU using the existing Python environment (PyTorch 2.13.0). No camera, serial
+connection, or physical arm was used. Datasets and checkpoint files are local
+artifacts, separate from the source commit.
+
+## Cell classifier
+
+Source: the supplied `Connect4-Forked on 8-17-2026.coco (1)` export. Its files
+were read in place without modification. Derived crops live in `data/cells`.
+
+| Split | Source images | Empty crops | Red crops | Yellow crops |
+|---|---:|---:|---:|---:|
+| Train | 39 | 1,228 | 215 | 192 |
+| Validation | 11 | 329 | 69 | 64 |
+| Test | 5 | 134 | 44 | 32 |
+
+Some source cells are not annotated; the converter exports only explicit
+annotations. None of these splits has occlusion examples. It preserved the
+provided image splits and found no identical source-image bytes across them;
+recording/session independence has not been established.
+
+Trained for 20 epochs, Adam learning rate 0.001, batch size 64, seed 42.
+Checkpoint selected by validation macro F1: epoch 5, validation accuracy 99.8%,
+validation macro F1 0.997.
+
+Held-out **cell** test accuracy: **96.7% (203/210)**, macro F1 **0.943**.
+
+| True class | Predicted empty | Predicted red | Predicted yellow |
+|---|---:|---:|---:|
+| Empty | 134 | 0 | 0 |
+| Red | 0 | 39 | 5 |
+| Yellow | 2 | 0 | 30 |
+
+The small test set represents five photos, not 210 independent scenes. This
+does not measure exact-board accuracy or prove reliable calibrated-cell
+inference. Tight COCO crops may differ from full cells in the application.
+There is no measured RF-DETR comparison in this experiment.
+
+Artifacts: `artifacts/vision/best.pt`, `history.json`, `evaluation-test.json`.
+
+## Neural player
+
+Generated 150 games with depth-6 minimax move labels, 35% random exploration,
+seed 42. After game splits and removing cross-split position/mirror overlap:
+2,723 training positions, 295 validation positions, 212 test positions.
+
+Trained for 30 epochs, Adam learning rate 0.001, batch size 128, seed 42.
+Selected epoch 24 by validation move agreement: **32.9%**. Held-out test move
+agreement: **44.3%**. Agreement is not the same as optimal-move accuracy because
+multiple moves can be equally good and the teacher is depth limited.
+
+Test value MSE: **2.029**, worse than a constant-zero prediction's MSE of 1
+on these win/loss examples. The value head is not yet a useful advantage
+estimate. Training loss decreased while generalization remained weak; simply
+adding epochs is not a sufficient fix.
+
+Matches used seed 123, alternated neural sides, and started with 0–6 random
+opening drops. No tactical overrides or minimax fallback helped the network.
+
+| Opponent | Wins | Draws | Losses |
+|---|---:|---:|---:|
+| Random, 40 games | 31 | 0 | 9 |
+| Depth-6 minimax, 20 games | 2 | 0 | 18 |
+
+Against random play, it took 31/101 available immediate winning moves and
+blocked 6/33 single threats. These are encountered positions, not an independent
+tactical benchmark: repeatedly missing a win can count several opportunities
+within one game. Against minimax, those figures were 2/2 and 9/15.
+
+Artifacts: `artifacts/player/best.pt`, `history.json`,
+`evaluation-random.json`, `evaluation-minimax.json`; dataset: `data/games.npz`.
+
+## Next learning experiments
+
+1. Keep the 55 images for the initial lesson. Add new recording sessions with
+   balanced red/yellow coverage and the lighting that caused these mistakes.
+   A practical next collection target is 200–500 diverse board photos, adjusted
+   according to measured errors. Reserve entire sessions for evaluation.
+2. Add hand/arm occlusion labels and actual calibrated-cell crops. Evaluate
+   complete boards and scan rejection, not only individual objects.
+3. Generate more varied game positions and a separate win/block curriculum.
+   Compare pure policy behavior before and after that change.
+4. Diagnose the value targets/distribution and compare value training against
+   simple baselines. A larger game sample or a separate value-training target
+   is a better next experiment than trusting this first head.
+5. Keep the original engine/detector as reference backends. The existing state
+   machine and hardware steps remain the application integration points.

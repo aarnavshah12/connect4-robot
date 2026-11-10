@@ -251,8 +251,12 @@ class Commentator:
             prompt += "\nMoves so far: " + "; ".join(ctx["moves"][-6:])
         if ctx.get("eval") is not None:
             e = ctx["eval"]
-            prompt += ("\nYour engine eval: " + (f"+{e}" if e >= 0 else str(e))
-                       + " (positive = you're winning; >500 = crushing)")
+            if ctx.get("eval_kind") == "expected_outcome":
+                prompt += (f"\nLearned outcome estimate: {e:+.2f} on [-1, 1], "
+                           "positive favors you. This estimate can be wrong; it is not a proven win.")
+            else:
+                prompt += ("\nYour engine eval: " + (f"+{e}" if e >= 0 else str(e))
+                           + " (positive = you're winning; >500 = crushing)")
         if self.history:
             prompt += "\nYour recent lines (don't repeat yourself): " + " | ".join(
                 self.history

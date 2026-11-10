@@ -18,11 +18,14 @@ from game import load_config
 from vision import Vision
 
 
-def explain(dets, calib):
+def explain(dets, calib, min_confidence=None):
+    if dets is None:
+        return None, [], [], "UNCERTAIN / OCCLUDED scan"
     board = empty_board()
     kept, rejected = [], []
     for x, y, w, h, cls, conf in dets:
-        thr = MIN_CONFIDENCE.get(cls, DEFAULT_MIN_CONFIDENCE)
+        thr = (min_confidence if min_confidence is not None else
+               MIN_CONFIDENCE.get(cls, DEFAULT_MIN_CONFIDENCE))
         if cls not in COLOR_TO_PLAYER:
             rejected.append(f"{cls}({conf:.2f}) ignored-class")
             continue
@@ -61,7 +64,7 @@ def main():
             _, frame = vision.frame()
             if frame is not None:
                 _, dets_now, _ = vision.detections()
-                for x, y, w, h, cls, conf in dets_now:
+                for x, y, w, h, cls, conf in dets_now or []:
                     if cls in COLOR_TO_PLAYER:
                         color = (60, 60, 230) if "red" in cls else (0, 205, 235)
                         cv2.rectangle(frame, (int(x - w/2), int(y - h/2)),
@@ -86,9 +89,12 @@ def main():
                 time.sleep(0.05)
                 continue
             last_fid = fid
-            board, kept, rejected, veto = explain(dets, calib)
+            board, kept, rejected, veto = explain(dets, calib,
+                                                0.0 if vision.backend == "torch" else None)
+            if board is None:
+                deb.reset()
             stable = deb.feed(board)
-            bits = [f"[{ifps:.0f}fps] {len(dets)} dets"]
+            bits = [f"[{ifps:.0f}fps] {len(dets or [])} dets"]
             if kept:
                 bits.append("kept: " + " ".join(kept))
             if rejected:
