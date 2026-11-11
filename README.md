@@ -24,10 +24,14 @@ The fullscreen overlay shows the camera feed, detections, the robot's board
 state, an advantage bar, and the commentary. **The language model writes the
 commentary; it does not choose moves.**
 
-## PyTorch models and demos
+## Update: PyTorch models and demos
 
-The [PyTorch self-play branch](https://github.com/aarnavshah12/connect4-robot/tree/pytorch-self-play)
-contains two trained models, their checkpoints, training scripts, and demos:
+The [original writeup](https://roboflow.com/blog/building-a-physical-ai-that-plays-connect-4)
+describes the robot using minimax to choose moves. Since publishing it, I've
+trained a PyTorch model for move decisions and a separate PyTorch vision model
+for reading the board. Both live in the
+[PyTorch self-play branch](https://github.com/aarnavshah12/connect4-robot/tree/pytorch-self-play),
+along with their checkpoints, training scripts, and demos:
 
 - **Game player:** A PyTorch policy/value network scores the seven possible
   moves and estimates the position. It first learned from simulated games,
