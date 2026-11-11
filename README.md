@@ -1,103 +1,132 @@
 # Connect 4 Robot
 
-A robot arm that plays Connect 4 against you — and talks trash while doing it.
+A physical Connect 4 opponent that watches the board, chooses a move, drops a
+red chip with a robot arm, and talks trash while you play yellow.
 
-A webcam watches the board, an RF-DETR model (trained on
-[Roboflow](https://roboflow.com)) reads the pieces, a minimax engine picks the
-move, a HiWonder MaxArm picks a red piece off a feeder stack with a suction cup
-and drops it into the chosen column, and Gemini writes board-aware roasts that
-an ElevenLabs voice delivers out loud. A fullscreen overlay shows the live
-feed, detections, the robot's "mental model" of the board, an advantage bar,
-and the commentary ticker.
+![The Connect 4 robot and board](docs/images/connect4-robot.webp)
 
+Read the [full build writeup on Roboflow](https://roboflow.com/blog/building-a-physical-ai-that-plays-connect-4)
+or [watch the demo](https://www.youtube.com/watch?v=1jhJQZQAS4U). The photos and
+diagrams below come from the writeup.
+
+## How it works
+
+![Diagram showing the robot's eyes, brain, hand, and mouth](docs/images/robot-pipeline.webp)
+
+| Part | What it does |
+| --- | --- |
+| **Eyes** | A webcam and locally running RF-DETR model detect the board and chips. Camera calibration maps detections to a 7 × 6 game state. |
+| **Brain** | The original game uses a depth-8 minimax/negamax search to choose a legal column. |
+| **Hand** | A HiWonder MaxArm picks a red chip from a stack with its suction cup and drops it into that column. |
+| **Mouth** | Gemini writes board-aware commentary, and ElevenLabs or macOS speech reads it aloud. |
+
+The fullscreen overlay shows the camera feed, detections, the robot's board
+state, an advantage bar, and the commentary. **The language model writes the
+commentary; it does not choose moves.**
+
+## PyTorch models and demos
+
+The [PyTorch self-play branch](https://github.com/aarnavshah12/connect4-robot/tree/pytorch-self-play)
+contains two trained models, their checkpoints, training scripts, and demos:
+
+- **Game player:** A PyTorch policy/value network scores the seven possible
+  moves and estimates the position. It first learned from simulated games,
+  then trained through self-play reinforcement learning. The demo can use
+  neural-guided tree search to look ahead before choosing a move.
+- **Board reader:** A PyTorch image classifier reads each of the 42 cells as
+  empty, red, yellow, or occluded. It uses calibrated board corners to locate
+  the cells in a photo.
+
+You can try both without a camera or robot arm. From a fresh clone:
+
+```bash
+git clone https://github.com/aarnavshah12/connect4-robot.git
+cd connect4-robot
+git switch pytorch-self-play
+uv venv .venv --python 3.12
+uv pip install --python .venv/bin/python -r requirements-ml.txt
+
+.venv/bin/python play_gui.py      # click a column to play against the bot
+.venv/bin/python vision_photo.py  # choose a board photo on macOS
 ```
-webcam -> RF-DETR (local, ~175ms/frame) -> homography -> 7x6 board state
-       -> state machine -> minimax (depth 8, ~12ms) -> serial -> MaxArm
-                        -> overlay window (the demo surface)
-                        -> Gemini commentary + ElevenLabs voice (async)
-```
 
-**The LLM never picks moves.** Minimax plays; the LLM is only the mouth.
+In the game window, use **Switch mode** to compare the self-play model with
+and without search and with the earlier supervised model. For the photo demo,
+click the board's four outer corners in the order shown on screen. It displays
+the predicted board and confidence for each cell. On other operating systems,
+pass a photo path with `--image /path/to/photo.jpg`.
 
-## Update: PyTorch models (November 10, 2026)
+The [PyTorch learning guide](https://github.com/aarnavshah12/connect4-robot/blob/pytorch-self-play/ml/README.md)
+walks through the model and vision training. The [self-play guide](https://github.com/aarnavshah12/connect4-robot/blob/pytorch-self-play/ml/SELF_PLAY.md)
+explains the reinforcement learning loop, and the [results](https://github.com/aarnavshah12/connect4-robot/blob/pytorch-self-play/ml/RESULTS.md)
+show the measured game and vision evaluations. The original robot workflow is
+documented below; the PyTorch code and selected weights live on the linked
+branch.
 
-We trained a PyTorch policy/value model to choose Connect 4 moves using
-simulated games and reinforcement learning. We also trained a PyTorch vision
-classifier to read the red, yellow, and empty cells of a calibrated board.
+## Physical build
 
-The code, trained checkpoints, and demos are in the
-[PyTorch self-play branch](https://github.com/aarnavshah12/connect4-robot/tree/pytorch-self-play).
-You can [play against the model](https://github.com/aarnavshah12/connect4-robot/blob/pytorch-self-play/play_gui.py)
-or [test a board photo](https://github.com/aarnavshah12/connect4-robot/blob/pytorch-self-play/vision_photo.py).
-The [learning guide](https://github.com/aarnavshah12/connect4-robot/blob/pytorch-self-play/ml/SELF_PLAY.md)
-explains the training process.
+The robot uses a HiWonder MaxArm with an ESP32 running the
+`MaxArm_micropython_microUSB` serial firmware, a suction-cup end effector, a
+vertical stack of red chips, and a 720p or better webcam aimed at the board.
+The human plays yellow; the robot plays red. The factory arm firmware backup is
+in `maxarm_factory_backup/`.
 
-## Hardware
+![Seven-channel cardboard guide for dropping chips](docs/images/chip-guide.webp)
 
-- HiWonder MaxArm (ESP32, MicroPython) over USB serial, running HiWonder's
-  `MaxArm_micropython_microUSB` serial firmware (factory firmware backed up in
-  `maxarm_factory_backup/`)
-- Suction-cup end effector; feeder = a vertical stack of red pieces
-- Any webcam at 720p+ pointed at the board
-- Human plays YELLOW, robot plays RED
+The cardboard guide helps each dropped chip land in its intended column. The
+[build writeup](https://roboflow.com/blog/building-a-physical-ai-that-plays-connect-4)
+shows how the guide and the rest of the rig were built.
 
-## Setup
+### Set up the original robot
 
 ```bash
 uv venv .venv --python 3.12
 uv pip install --python .venv/bin/python -r requirements.txt
-cp config.example.yaml config.yaml   # then fill in your keys
+cp config.example.yaml config.yaml
 ```
 
-Keys in `config.yaml` (gitignored): Roboflow (or via `ROBOFLOW_API_KEY` /
-`.claude/settings.local.json`), Gemini for trash talk, ElevenLabs for the
-voice. Everything degrades gracefully: no Gemini key = canned lines, no
-ElevenLabs = macOS `say`.
+Edit the gitignored `config.yaml` for your camera, serial port, and API keys.
+The RF-DETR model runs locally through Roboflow Inference; its key can also
+come from `ROBOFLOW_API_KEY`. Gemini is optional for commentary, and ElevenLabs
+is optional for speech: the app has canned lines and a macOS `say` fallback.
 
-## Calibration (once per rig setup)
+### Calibrate and play
 
-1. **Arm poses** — `python jog.py` (full teacher) or `python nudge.py`
-   (simple pad: arc left/right, up/down, suction test). Teach the feeder pick
-   point (`e`, on top of a FULL stack) and the 7 column drop slots (`0`-`6`).
-   `poses.json` stores them; `piece_thickness` makes the pick sink as the
-   stack empties.
-2. **Camera** — `python calibrate.py`: click the 4 corners of the play area,
-   press `x` if the grid comes up rotated, `s` to save.
-3. **Verify** — `python run_test.py --spot 1 --pieces 3` (arm cycles without
-   the game), `python debug_vision.py` (live window + per-detection log of
-   exactly what the board parser sees and rejects).
+1. Run `.venv/bin/python jog.py` or `.venv/bin/python nudge.py` to teach the
+   arm its feeder pick point and seven drop positions. These are saved in
+   `poses.json`.
+2. Run `.venv/bin/python calibrate.py` to mark the four board corners. Press
+   `x` if the grid is rotated and `s` to save the calibration.
+3. Use `.venv/bin/python debug_vision.py` to inspect detected chips and board
+   parsing before a game.
+4. Start the game with `.venv/bin/python game.py`. Use
+   `.venv/bin/python game.py --no-arm` to place the robot's pieces yourself.
 
-## Run
+Drop a yellow chip when the overlay says it is your turn. Clearing the board
+after a win starts another game. Spoken lines are recorded in `roast_log.jsonl`.
 
-```bash
-.venv/bin/python game.py           # the real thing
-.venv/bin/python game.py --no-arm  # rehearsal: you place the robot's pieces
-```
+## Code map
 
-Drop a yellow piece when the banner says it's your turn. Clearing the board
-after a win starts a new game. Every spoken line is logged to
-`roast_log.jsonl`.
+| File | Purpose |
+| --- | --- |
+| `game.py` | Game state machine and turn orchestration |
+| `engine.py` | Original negamax search with alpha-beta pruning |
+| `vision.py` / `board.py` | Camera inference, calibration, board parsing, and game rules |
+| `maxarm.py` | Serial driver for the robot arm |
+| `overlay.py` | Fullscreen game display |
+| `commentary.py` / `voice.py` | Commentary and speech |
+| `jog.py` / `nudge.py` / `calibrate.py` | Arm and camera calibration tools |
 
-## Repo map
-
-| File | What it is |
-|---|---|
-| `game.py` | State machine: WAIT_HUMAN → SCANNING → THINKING → ROBOT_MOVING → VERIFYING |
-| `engine.py` | Bitboard negamax, depth 8, alpha-beta + transposition table |
-| `vision.py` | Camera thread + RF-DETR in a separate process over shared memory |
-| `board.py` | Homography snap, debounce, physics check, legality, win detection |
-| `overlay.py` | The demo window (also runs standalone with a mocked state machine) |
-| `maxarm.py` | Serial driver for the arm (validated protocol quirks documented inside) |
-| `commentary.py` / `voice.py` | Gemini roasts (board-aware) + ElevenLabs speech |
-| `jog.py` / `nudge.py` / `calibrate.py` / `run_test.py` / `debug_vision.py` | Calibration & bring-up tools |
-| `connect4-robot-plan-v2.md` | The original build plan |
+The PyTorch training and demo files are listed in the
+[branch's learning guide](https://github.com/aarnavshah12/connect4-robot/blob/pytorch-self-play/ml/README.md).
 
 ## Tests
 
+Run the hardware-free test suite with:
+
 ```bash
-.venv/bin/python -m pytest tests/   # 41 tests, no hardware needed
+.venv/bin/python -m pytest tests/ -q
 ```
 
-Driver bytes vs a fake serial port, engine never missing win-in-1/block-in-1,
-board parsing/debounce, vision plumbing across real process boundaries,
-overlay frame budget, commentary style rules, full state-machine turns.
+It covers the game engine, board parsing, vision plumbing, arm driver protocol,
+overlay, commentary, and turn flow.
