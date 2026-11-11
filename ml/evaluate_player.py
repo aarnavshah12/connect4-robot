@@ -88,11 +88,15 @@ def main():
     parser.add_argument("--device", default="cpu", choices=["cpu", "mps", "cuda"])
     parser.add_argument("--tactical-guard", action="store_true",
                         help="force immediate wins and single-threat blocks")
+    parser.add_argument("--search-simulations", type=int, default=0,
+                        help="neural MCTS simulations per move (0 uses policy directly)")
     parser.add_argument("--output")
     args = parser.parse_args()
     player = TorchPlayer(args.checkpoint, device=args.device,
-                         tactical_guard=args.tactical_guard)
+                         tactical_guard=args.tactical_guard,
+                         search_simulations=args.search_simulations)
     result = {"tactical_guard": args.tactical_guard,
+              "search_simulations": args.search_simulations,
               "held_out": metrics(player.model, DataLoader(PositionDataset(args.data, "test"), batch_size=128),
                                   player.device),
               "matches": evaluate(player, args.games, args.opponent, args.depth, args.seed)}

@@ -1,8 +1,49 @@
 # PyTorch experiments — 2026-11-10
 
+## Self-play RL branch: `pytorch-self-play`
+
+Vision weights and the five-photo vision results below are unchanged. This
+branch adds an outcome-based PPO player trained for **20 iterations × 512
+simulated games**, yielding 98,919 learner positions, from the supervised
+checkpoint. The learner sampled moves
+against frozen greedy supervised and previous policies, random play, and
+depth-4 minimax as an opponent. Only final win/draw/loss results trained PPO;
+the minimax opponent did not label moves. Training ran on CPU with seed 2031.
+The selected RL checkpoint is the final iteration. The old supervised weights
+remain at `artifacts/player/supervised.pt`.
+
+At runtime the recommended player uses **64 neural MCTS simulations** per
+move plus the optional immediate win/block rule. MCTS uses the PyTorch policy
+and value heads and the Connect 4 rules, not the old minimax engine. On one
+midgame board, its median move time was **11.7 ms** on this machine's CPU
+after warmup (30 repeated calls); live end-to-end timing was not measured.
+
+Paired 40-game matches versus depth-6 minimax alternated player sides and
+used the same 0–6-drop random openings for each checkpoint:
+
+| Opening seed | Supervised + 64 search W/D/L | RL + 64 search W/D/L |
+|---|---:|---:|
+| 123 | 9/9/22 | **14/3/23** |
+| 8675309 | 5/9/26 | **14/5/21** |
+
+Direct head-to-head matches with the same search and guard also favored RL:
+**49 wins, 17 draws, 34 losses** on seed 2027 and **46 wins, 18 draws, 36
+losses** on seed 4040, each over 100 games. Against random play, the RL player
+with search won **80/80** on seed 123.
+
+The search is material. Without it, the guarded RL policy beat the guarded
+supervised policy **65–26** head-to-head with 9 draws on seed 2027, but scored
+only **2/1/37** versus depth-6 minimax on seed 123, compared with **7/3/30**
+for the guarded supervised policy. PPO's value MSE against the *old minimax
+search target* rose from 0.188 to 0.274; that target is no longer what the RL
+value head was trained to predict, so it is not a measure of outcome-value
+quality. These results support the combined RL-plus-search configuration, not
+a claim that the raw RL network solves Connect 4. The opening samples are
+small, and no camera or arm was used.
+
 ## Improved branch: `pytorch-models-v2`
 
-The selected checkpoints now ship with this branch. The 55-image COCO export
+The selected v2 checkpoints shipped with that branch. The 55-image COCO export
 was read without changing its raw files. `prepare_board_cells.py` found 49
 complete annotated boards: 34 train, 10 validation, and 5 test. It combined
 full calibrated-cell crops with the original training object crops (3,063
@@ -64,9 +105,11 @@ improvement in basic tactical reliability. The network remains substantially
 weaker than depth-6 minimax; it needs a stronger training curriculum or search
 before being described as competitive with that engine.
 
-Checkpoint paths: `artifacts/vision/best.pt` and `artifacts/player/best.pt`.
-The two selected weight files are tracked in this branch; raw images, derived
-crops, game datasets, and experiment histories remain local and ignored by Git.
+The v2 checkpoint paths were `artifacts/vision/best.pt` and
+`artifacts/player/best.pt`. In this self-play branch the same vision weights
+remain at that path; the v2 player is `artifacts/player/supervised.pt` and the
+RL player is `artifacts/player/best.pt`. Raw images, derived crops, game
+datasets, and experiment histories remain local and ignored by Git.
 
 ## Earlier baseline: `pytorch-models`
 

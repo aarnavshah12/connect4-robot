@@ -1,5 +1,19 @@
 # Progress
 
+## Self-play RL player (2026-11-10, `pytorch-self-play`)
+- Kept the v2 vision checkpoint unchanged and documented saved-photo and
+  camera-only vision checks; no arm was run.
+- Trained an outcome-based PPO player for 10,240 simulated games (98,919
+  learner positions) against frozen PyTorch, random, and depth-4 minimax
+  opponents. Preserved the supervised checkpoint for direct comparison.
+- Added neural-guided MCTS with 64 simulations per move and no old minimax call
+  at runtime. A warmed midgame move took about 12 ms on this machine's CPU.
+- With the same search and tactical guard, RL beat the supervised checkpoint
+  49–34 and 46–36 in two 100-game direct comparisons, with 17 and 18 draws.
+  Against depth-6 minimax, it scored 14/3/23 and 14/5/21 (W/D/L) in two
+  40-game sets; see `ml/RESULTS.md` for matched baselines and limitations.
+- Offline checks: 56 tests passed.
+
 ## PyTorch model improvements (2026-11-10, `pytorch-models-v2`)
 - Audited the supplied COCO export without changing raw files; six explicit
   chip-color corrections live in `ml/label_fixes.json`.

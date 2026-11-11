@@ -252,7 +252,7 @@ class Commentator:
         if ctx.get("eval") is not None:
             e = ctx["eval"]
             if ctx.get("eval_kind") == "learned_value":
-                prompt += (f"\nLearned search estimate: {e:+.2f} on [-1, 1], "
+                prompt += (f"\nLearned advantage estimate: {e:+.2f} on [-1, 1], "
                            "positive favors you. This estimate can be wrong; it is not a proven win.")
             else:
                 prompt += ("\nYour engine eval: " + (f"+{e}" if e >= 0 else str(e))

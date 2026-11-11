@@ -21,14 +21,18 @@ class PolicyValueNet(nn.Module):
 
     def forward(self, positions):
         features = self.features(positions)
-        # Policy logits are move preferences. Value approximates the teacher's search score.
+        # Policy logits are move preferences. The value target depends on training:
+        # teacher search scores for supervised learning, game results for self-play.
         return self.policy(features), self.value(features).tanh().squeeze(-1)
 
 
 class TorchPlayer:
     score_kind = "learned_value"
 
-    def __init__(self, checkpoint, device="cpu", tactical_guard=False):
+    def __init__(self, checkpoint, device="cpu", tactical_guard=False,
+                 search_simulations=0):
+        if search_simulations < 0:
+            raise ValueError("search_simulations cannot be negative")
         self.device = choose_device(device)
         saved = load_checkpoint(checkpoint, "player")
         if saved.get("encoding") != "current-opponent-bottom-first":
@@ -37,6 +41,7 @@ class TorchPlayer:
         self.model.load_state_dict(saved["state_dict"])
         self.model.eval()
         self.tactical_guard = tactical_guard
+        self.search_simulations = search_simulations
 
     @staticmethod
     def _winning_columns(board, player):
@@ -64,9 +69,15 @@ class TorchPlayer:
             probabilities = logits.masked_fill(~mask, -torch.inf).softmax(dim=1)[0].cpu().numpy()
         if not np.isfinite(probabilities).all() or not torch.isfinite(value).all():
             raise ValueError("player produced non-finite predictions")
+        column = int(probabilities.argmax())
+        estimate = float(value.item())
+        if self.search_simulations:
+            from ml.mcts import search
+
+            column, probabilities, estimate = search(
+                self.model, board, player, self.device, self.search_simulations)
         if considered is not None:
             considered.extend((int(c), float(probabilities[c])) for c in np.flatnonzero(allowed))
-        column = int(probabilities.argmax())
         if self.tactical_guard:
             wins = self._winning_columns(board, player)
             if wins:
@@ -75,4 +86,4 @@ class TorchPlayer:
                 threats = self._winning_columns(board, 3 - player)
                 if len(threats) == 1:
                     column = threats[0]
-        return int(column), float(value.item())
+        return int(column), estimate

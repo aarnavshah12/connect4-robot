@@ -8,6 +8,7 @@ player_backend: torch
 player_checkpoint: artifacts/player/best.pt
 player_device: cpu
 player_tactical_guard: true  # optional immediate-win/block rule; policy still picks other moves
+player_search_simulations: 64  # neural MCTS; set to 0 for the raw policy
 
 camera_index: 0
 port: "/dev/cu.usbserial-310"

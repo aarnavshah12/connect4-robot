@@ -1,5 +1,10 @@
 # Learn PyTorch with the Connect 4 robot
 
+The self-play RL follow-up is in [SELF_PLAY.md](SELF_PLAY.md). It makes the
+trained RL checkpoint and neural tree search the recommended game player; the
+vision checkpoint is unchanged. This page explains the original supervised
+training stage that the RL run starts from.
+
 This branch builds two small neural networks with ordinary Python training
 scripts. You can read every layer and every optimizer step. Start with the
 player: its data comes from simulation, so it needs no hardware or images.
@@ -86,9 +91,9 @@ augmentation mirrors columns and changes a move label `c` to `6-c`.
 Evaluate and try the player yourself:
 
 ```bash
-.venv/bin/python -m ml.evaluate_player --checkpoint artifacts/player/best.pt --data data/games-experiment.npz --opponent random --games 40
-.venv/bin/python -m ml.evaluate_player --checkpoint artifacts/player/best.pt --data data/games-experiment.npz --opponent minimax --depth 6 --games 20
-.venv/bin/python -m ml.play
+.venv/bin/python -m ml.evaluate_player --checkpoint artifacts/player/supervised.pt --data data/games-experiment.npz --opponent random --games 40
+.venv/bin/python -m ml.evaluate_player --checkpoint artifacts/player/supervised.pt --data data/games-experiment.npz --opponent minimax --depth 6 --games 20
+.venv/bin/python -m ml.play --checkpoint artifacts/player/supervised.pt
 ```
 
 Evaluation alternates the neural player's side and uses 0–6 random opening
@@ -116,9 +121,9 @@ opponent, opening seed, number of games, and guard setting.
    measure how often the pure policy handles them without the guard.
 
 The original depth-8 engine remains available as a baseline and data teacher.
-The PyTorch backend chooses moves with the network at runtime. A later lesson
-can add MCTS/self-play; this version is supervised learning, not reinforcement
-learning.
+The PyTorch backend chooses moves with the network at runtime. The training in
+this section is supervised; [the follow-up lesson](SELF_PLAY.md) adds self-play
+reinforcement learning and neural MCTS.
 
 ## 4. Train the vision model
 
@@ -185,6 +190,34 @@ validation macro F1, so a common empty class cannot dominate selection. The
 evaluation prints a confusion matrix
 (rows=true, columns=predicted) and per-class precision/recall.
 
+### Test the vision model without the arm
+
+For the COCO export already prepared on this computer, run the offline test
+from the new worktree. It reports cell accuracy, exact boards, confidence
+acceptance, and the synthetic lighting probes:
+
+```bash
+.venv/bin/python -m ml.evaluate_vision --data ../connect4-pytorch-models-v2/data/cells-v2 --checkpoint artifacts/vision/best.pt --stress
+```
+
+The derived image data is local and ignored by Git. After a fresh clone,
+prepare it from your Roboflow COCO export with the commands above. This test
+uses saved photos and does not open a camera.
+
+To test your **live camera** without moving the arm, put this rig's
+`calibration.json` and a copy of `config.pytorch.example.yaml` named
+`config.yaml` in this worktree, check `camera_index`, then run:
+
+```bash
+.venv/bin/python debug_vision.py
+```
+
+The window shows the board grid and chip labels; the terminal prints accepted
+and rejected scans. Place a few red and yellow chips, then check each cell,
+confidence, and the five-read stable-board indication. Press `q` to quit.
+Recalibrate if the grid does not line up. This is the relevant real-camera
+check; the five saved test photos do not prove performance on your camera.
+
 **Vision exercises:**
 
 1. Inspect one red, yellow, and empty crop. Compare them to the actual cell
@@ -218,8 +251,9 @@ Existing gravity, one-move legality, and robot-placement verification still appl
 
 Neural values use their own [-1, 1] display scale and commentary wording. A
 value near +1 is a learned estimate; it never triggers minimax's proven-win
-announcement. Column highlights represent model preferences for the neural
-backend, and search candidates for minimax.
+announcement. Column highlights show search visit shares when neural MCTS is
+enabled, policy probabilities for the raw network, and search candidates for
+minimax.
 
 ## 6. Keep experiments reproducible
 

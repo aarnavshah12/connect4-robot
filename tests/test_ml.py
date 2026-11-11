@@ -17,11 +17,13 @@ from game import Game, load_config
 from ml.cells import (CLASS_NAMES, IMAGE_SIZE, CellClassifier, CellReader,
                       cell_crops, image_tensor, observation)
 from ml.generate_games import generate
+from ml.mcts import search
 from ml.player import PolicyValueNet, TorchPlayer
 from ml.positions import encode, position_key
 from ml.prepare_board_cells import _grid
 from ml.prepare_cells import prepare
 from ml.train_player import train as train_player
+from ml.train_selfplay import train as train_selfplay
 from ml.train_vision import train as train_vision
 from tests.test_game import FakeArm, NullOverlay, RecordingSay, ScriptedVision, with_piece
 from tests.test_vision import SyntheticCamera
@@ -107,6 +109,35 @@ def test_optional_tactical_guard_uses_rules_without_minimax(tmp_path):
     for col in range(3):
         threatened[0][col] = B.HUMAN
     assert guarded(threatened, B.ROBOT)[0] == 3
+
+
+def test_neural_search_finds_a_win_without_changing_board():
+    model = PolicyValueNet()
+    with torch.no_grad():
+        for parameter in model.parameters():
+            parameter.zero_()
+    board = B.empty_board()
+    for col in range(3):
+        board[0][col] = B.ROBOT
+    before = [row[:] for row in board]
+    col, visits, value = search(model, board, B.ROBOT, simulations=16)
+    assert col == 3
+    assert visits.sum() == pytest.approx(1)
+    assert value > 0
+    assert board == before
+
+
+def test_selfplay_training_writes_a_loadable_checkpoint(tmp_path):
+    initial = PolicyValueNet()
+    start = tmp_path / "start.pt"
+    torch.save({"format_version": 1, "kind": "player", "state_dict": initial.state_dict(),
+                "encoding": "current-opponent-bottom-first"}, start)
+    output = tmp_path / "selfplay"
+    history = train_selfplay(start, output, iterations=1, games_per_iteration=8,
+                             ppo_epochs=1, opponent_depth=2)
+    assert history[0]["games"] == 8 and history[0]["positions"] > 0
+    player = TorchPlayer(output / "last.pt", search_simulations=8)
+    assert B.landing_row(B.empty_board(), player(B.empty_board(), B.ROBOT)[0]) is not None
 
 
 def test_position_encoding_and_mirror_groups():

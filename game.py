@@ -267,7 +267,8 @@ def main():
         if not checkpoint.is_absolute():
             checkpoint = Path(__file__).parent / checkpoint
         move_fn = TorchPlayer(checkpoint, device=cfg.get("player_device", "cpu"),
-                              tactical_guard=cfg.get("player_tactical_guard", False))
+                              tactical_guard=cfg.get("player_tactical_guard", False),
+                              search_simulations=cfg.get("player_search_simulations", 0))
     elif player_backend == "minimax":
         move_fn = best_move
     else:
