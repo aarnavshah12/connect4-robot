@@ -19,26 +19,18 @@ webcam -> RF-DETR (local, ~175ms/frame) -> homography -> 7x6 board state
 
 **The LLM never picks moves.** Minimax plays; the LLM is only the mouth.
 
-## Update: PyTorch experiments (November 10, 2026)
+## Update: PyTorch models (November 10, 2026)
 
-The physical build described above remains the original RF-DETR and minimax
-version. In the separate [PyTorch self-play branch](https://github.com/aarnavshah12/connect4-robot/tree/pytorch-self-play),
-we explored a trainable player. Our first network learned to imitate depth-6
-minimax, but played poorly against that engine. We then trained a PyTorch
-policy/value network with PPO on 10,240 simulated games. The new player uses
-64 neural-guided tree-search simulations per move and an immediate win/block
-rule. In two paired 40-game tests against depth-6 minimax, it scored
-14 wins / 3 draws / 23 losses and 14 wins / 5
-draws / 21 losses. It is still weaker than minimax, and we have not tested it
-with the physical arm.
+We trained a PyTorch policy/value model to choose Connect 4 moves using
+simulated games and reinforcement learning. We also trained a PyTorch vision
+classifier to read the red, yellow, and empty cells of a calibrated board.
 
-That branch also includes an experimental PyTorch classifier for 42 calibrated
-board cells; the original RF-DETR detector remains available. You can
-[play the neural bot](https://github.com/aarnavshah12/connect4-robot/blob/pytorch-self-play/play_gui.py)
-or [inspect a board photo](https://github.com/aarnavshah12/connect4-robot/blob/pytorch-self-play/vision_photo.py)
-without the arm. See the branch's [training guide](https://github.com/aarnavshah12/connect4-robot/blob/pytorch-self-play/ml/SELF_PLAY.md)
-and [measured results](https://github.com/aarnavshah12/connect4-robot/blob/pytorch-self-play/ml/RESULTS.md)
-for the setup, comparisons, and limitations.
+The code, trained checkpoints, and demos are in the
+[PyTorch self-play branch](https://github.com/aarnavshah12/connect4-robot/tree/pytorch-self-play).
+You can [play against the model](https://github.com/aarnavshah12/connect4-robot/blob/pytorch-self-play/play_gui.py)
+or [test a board photo](https://github.com/aarnavshah12/connect4-robot/blob/pytorch-self-play/vision_photo.py).
+The [learning guide](https://github.com/aarnavshah12/connect4-robot/blob/pytorch-self-play/ml/SELF_PLAY.md)
+explains the training process.
 
 ## Hardware
 
